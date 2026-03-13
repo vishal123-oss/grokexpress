@@ -22,15 +22,21 @@ export class RouteExecutor {
     
     const handlers = route.getHandlers();
     let index = 0;
+    let error = null;
     
     /**
      * Next function - moves to next handler in chain
      * @param {Error} err - Optional error to trigger error handling
      */
     async function next(err) {
-      // If error was passed, throw it to be caught by error handler
+      // If error was passed, store it and stop further middleware
       if (err) {
-        throw err;
+        error = err;
+        return;
+      }
+      
+      if (error) {
+        return;
       }
       
       // If response already sent, stop execution
@@ -53,14 +59,21 @@ export class RouteExecutor {
         if (result && typeof result.then === 'function') {
           await result;
         }
-      } catch (error) {
-        // Re-throw to be caught by application's error handler
-        throw error;
+      } catch (handlerErr) {
+        error = handlerErr;
+      }
+      
+      if (error) {
+        return;
       }
     }
     
     // Start the handler chain
     await next();
+    
+    if (error) {
+      throw error;
+    }
   }
   
   /**

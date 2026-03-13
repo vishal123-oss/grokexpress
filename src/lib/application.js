@@ -67,6 +67,11 @@ export function createApplication() {
         (mw) => true // All global middleware runs for all requests
       );
       
+      if (globalResult.error) {
+        await handleError(globalResult.error, request, response);
+        return;
+      }
+      
       if (globalResult.ended) {
         return; // Response sent by global middleware
       }
@@ -78,6 +83,11 @@ export function createApplication() {
         response,
         (mw) => pathMatches(mw.path, request.path)
       );
+      
+      if (pathResult.error) {
+        await handleError(pathResult.error, request, response);
+        return;
+      }
       
       if (pathResult.ended) {
         return; // Response sent by path middleware
@@ -116,11 +126,12 @@ export function createApplication() {
   async function executeMiddlewareStack(stack, request, response, shouldRun) {
     let index = 0;
     let ended = false;
+    let error = null;
     
     async function next(err) {
-      // If error passed, throw it
       if (err) {
-        throw err;
+        error = err;
+        return;
       }
       
       // If response already sent, stop
@@ -133,7 +144,11 @@ export function createApplication() {
       while (index < stack.length) {
         const middleware = stack[index++];
         
-        if (shouldRun(middleware)) {
+        if (!shouldRun(middleware)) {
+          continue;
+        }
+        
+        try {
           // Execute middleware
           const result = middleware.handler(request, response, next);
           
@@ -141,19 +156,25 @@ export function createApplication() {
           if (result && typeof result.then === 'function') {
             await result;
           }
-          
-          // Check if response was sent
-          if (response.headersSent || response.writableEnded) {
-            ended = true;
-          }
-          
+        } catch (handlerErr) {
+          error = handlerErr;
+        }
+        
+        if (error) {
           return;
         }
+        
+        // Check if response was sent
+        if (response.headersSent || response.writableEnded) {
+          ended = true;
+        }
+        
+        return;
       }
     }
     
     await next();
-    return { ended };
+    return { ended, error };
   }
   
   /**
@@ -166,7 +187,7 @@ export function createApplication() {
     for (const handler of errorHandlers) {
       try {
         // Error handlers have signature: (err, req, res, next)
-        const result = handler(request, response, () => {}, err);
+        const result = handler(err, request, response, () => {});
         
         if (result && typeof result.then === 'function') {
           await result;

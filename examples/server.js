@@ -151,6 +151,10 @@ app.get('/', (req, res) => {
       { method: 'GET', path: '/public/file.txt', description: 'Public file route' },
       { method: 'POST', path: '/users', description: 'POST with validation middleware' },
       { method: 'GET', path: '/error-test', description: 'Trigger error for error handler test' },
+      { method: 'GET', path: '/error-sync', description: 'Sync error handling test' },
+      { method: 'GET', path: '/error-async', description: 'Async rejected promise test' },
+      { method: 'GET', path: '/error-next', description: 'next(err) skip middleware test' },
+      { method: 'GET', path: '/error-default', description: 'Default error response test' },
       { method: 'GET', path: '/router-test', description: 'Router with its own middleware' },
       // Response methods tests
       { method: 'GET', path: '/response/status', description: 'res.status() test' },
@@ -392,7 +396,7 @@ app.post('/users',
 );
 
 // ============================================
-// ERROR TEST ROUTE
+// ERROR TEST ROUTES
 // ============================================
 
 /**
@@ -403,6 +407,44 @@ app.get('/error-test', (req, res, next) => {
   const error = new Error('This is a test error');
   error.status = 400;
   throw error;
+});
+
+/**
+ * Route: GET /error-sync
+ * Throws synchronous error inside middleware
+ */
+app.get('/error-sync', (req, res, next) => {
+  throw new Error('Sync error from middleware');
+});
+
+/**
+ * Route: GET /error-async
+ * Returns rejected promise to test async error handling
+ */
+app.get('/error-async', async (req, res, next) => {
+  throw new Error('Async error (rejected promise)');
+});
+
+/**
+ * Route: GET /error-next
+ * Calls next(err) to skip remaining middleware
+ */
+app.get('/error-next',
+  (req, res, next) => {
+    req.beforeError = true;
+    next(new Error('Error via next()'));
+  },
+  (req, res) => {
+    res.json({ shouldNotRun: true });
+  }
+);
+
+/**
+ * Route: GET /error-default
+ * No custom error handler should catch this (tests default error response)
+ */
+app.get('/error-default', (req, res, next) => {
+  throw new Error('Default error response test');
 });
 
 // ============================================
@@ -770,8 +812,12 @@ app.listen(PORT, (address) => {
   console.log(`curl -X POST http://localhost:${address.port}/users -H "Content-Type: application/json" -d '{"name":"John","email":"john@example.com"}'`);
   console.log(`curl -X POST http://localhost:${address.port}/users -H "Content-Type: application/json" -d '{"name":"John"}'`);
   
-  console.log('\n# 5. Error Handler Test');
+  console.log('\n# 5. Error Handler Tests');
   console.log(`curl http://localhost:${address.port}/error-test`);
+  console.log(`curl http://localhost:${address.port}/error-sync`);
+  console.log(`curl http://localhost:${address.port}/error-async`);
+  console.log(`curl http://localhost:${address.port}/error-next`);
+  console.log(`curl http://localhost:${address.port}/error-default`);
   
   console.log('\n# 6. Router with Middleware');
   console.log(`curl http://localhost:${address.port}/router-test/products`);
