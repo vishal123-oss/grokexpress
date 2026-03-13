@@ -1,14 +1,18 @@
 /**
- * grokexpress Example Server
+ * grokexpress - Comprehensive Middleware Demo
  * 
- * This example demonstrates how to use grokexpress to build a REST API
- * with middleware, routing, and error handling.
+ * This example demonstrates ALL middleware types:
+ * 1. Global Middleware - runs on every request
+ * 2. Path-specific Middleware - runs for matching paths
+ * 3. Route-level (Inline) Middleware - specific to individual routes
+ * 4. Error Handler Middleware - handles errors (4 parameters)
+ * 5. Router with Middleware - mounted routers with their own middleware
  * 
- * Middleware Features Demonstrated:
- * - Sync and Async middleware
- * - Middleware execution order
- * - Pipeline stopping when response is sent
- * - Error handling middleware (4 parameters)
+ * Execution Order:
+ * 1. Global Middleware (app.use(fn))
+ * 2. Path-specific Middleware (app.use('/path', fn))
+ * 3. Route Inline Middleware (app.get('/path', mw, handler))
+ * 4. Error Handlers (app.use((err, req, res, next) => {}))
  */
 
 import createApplication, { Router } from '../src/lib/index.js';
@@ -18,443 +22,447 @@ import createApplication, { Router } from '../src/lib/index.js';
 // ============================================
 const app = createApplication();
 
+// Track middleware execution for demonstration
+const executionLog = [];
+
+function logExecution(type, name, path) {
+  const entry = { type, name, path, time: Date.now() };
+  executionLog.push(entry);
+  console.log(`[${type}] ${name} - ${path}`);
+}
+
 // ============================================
-// MIDDLEWARE TEST CASES
+// 1. GLOBAL MIDDLEWARE
+// Runs on EVERY request
 // ============================================
 
 /**
- * TEST 1: Sync Middleware
- * - Synchronous middleware executes immediately
- * - Must call next() to continue to next middleware
+ * Global Middleware 1: Request Logger
+ * Logs all incoming requests
  */
 app.use((req, res, next) => {
-  // Add custom property to request
-  req.requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  console.log(`[Sync Middleware] Request ID: ${req.requestId}`);
-  next(); // Continue to next middleware
-});
-
-/**
- * TEST 2: Async Middleware
- * - Async middleware can use await for async operations
- * - Pipeline waits for async middleware to complete
- */
-app.use(async (req, res, next) => {
-  console.log('[Async Middleware] Processing...');
-  
-  // Simulate async operation (e.g., database lookup, API call)
-  await new Promise(resolve => setTimeout(resolve, 10));
-  
-  // Add timestamp to request
+  logExecution('GLOBAL', 'Request Logger', req.path);
+  req.requestId = `req_${Date.now()}`;
   req.startTime = Date.now();
-  console.log('[Async Middleware] Done');
-  
-  await next(); // Continue to next middleware
+  next();
 });
 
 /**
- * TEST 3: Middleware Execution Order
- * - Middleware executes in the order it's added
- * - Each middleware can modify request/response before passing to next
+ * Global Middleware 2: CORS Headers
+ * Adds CORS headers to all responses
  */
 app.use((req, res, next) => {
-  // Track middleware execution order
-  if (!req.middlewareOrder) {
-    req.middlewareOrder = [];
-  }
-  req.middlewareOrder.push('middleware-1');
-  console.log('[Order Test] Middleware 1 executed');
-  next();
-});
-
-app.use((req, res, next) => {
-  req.middlewareOrder.push('middleware-2');
-  console.log('[Order Test] Middleware 2 executed');
-  next();
-});
-
-app.use((req, res, next) => {
-  req.middlewareOrder.push('middleware-3');
-  console.log('[Order Test] Middleware 3 executed');
-  next();
-});
-
-/**
- * TEST 4: Pipeline Stopping
- * - Middleware can stop the pipeline by sending a response
- * - If response is sent, subsequent middleware/routes are NOT executed
- * 
- * Try: GET /blocked - will stop at blocking middleware
- * Try: GET /not-blocked - will pass through all middleware
- */
-app.use('/blocked', (req, res, next) => {
-  console.log('[Blocking Middleware] Stopping pipeline here');
-  // Response sent WITHOUT calling next() - pipeline stops!
-  res.json({
-    message: 'Pipeline stopped by middleware',
-    requestId: req.requestId,
-    middlewareOrder: req.middlewareOrder
-  });
-  // next() NOT called - pipeline stops here
-});
-
-/**
- * TEST 5: Path-specific Middleware
- * - Middleware can be mounted on specific paths
- * - Only executes for matching paths
- */
-app.use('/api/admin', (req, res, next) => {
-  console.log('[Admin Middleware] Checking admin access...');
-  // Simulate auth check
-  const authHeader = req.get('authorization');
-  if (!authHeader) {
-    // Stop pipeline and return error
-    return res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Authorization header required for admin routes'
-    });
-  }
-  req.isAdmin = true;
-  next();
-});
-
-// ============================================
-// Built-in Middleware
-// ============================================
-
-/**
- * Logger Middleware - logs all incoming requests
- */
-app.use(async (req, res, next) => {
-  const start = Date.now();
-  const timestamp = new Date().toISOString();
-  
-  // Log after response is sent
-  res.raw.on('finish', () => {
-    const duration = Date.now() - start;
-    console.log(`[${timestamp}] ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
-  });
-  
-  await next();
-});
-
-/**
- * JSON Body Parser Middleware - parses JSON request bodies
- */
-app.use(async (req, res, next) => {
-  if (req.is('application/json') && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
-    try {
-      req.body = await req.json();
-    } catch (err) {
-      return res.status(400).json({ error: 'Invalid JSON body' });
-    }
-  }
-  await next();
-});
-
-/**
- * CORS Middleware - adds CORS headers
- */
-app.use(async (req, res, next) => {
+  logExecution('GLOBAL', 'CORS Headers', req.path);
   res.set({
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization'
   });
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  
-  await next();
+  next();
+});
+
+/**
+ * Global Middleware 3: Security Headers
+ * Adds security headers
+ */
+app.use((req, res, next) => {
+  logExecution('GLOBAL', 'Security Headers', req.path);
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'X-XSS-Protection': '1; mode=block'
+  });
+  next();
 });
 
 // ============================================
-// Routes
+// 2. PATH-SPECIFIC MIDDLEWARE
+// Only runs when path matches
 // ============================================
 
 /**
- * Home Route - API info
+ * Path Middleware: /api/*
+ * API-specific middleware
+ */
+app.use('/api', (req, res, next) => {
+  logExecution('PATH', 'API Middleware', req.path);
+  req.apiVersion = 'v1';
+  req.isApiRequest = true;
+  next();
+});
+
+/**
+ * Path Middleware: /admin/*
+ * Admin authentication check
+ */
+app.use('/admin', (req, res, next) => {
+  logExecution('PATH', 'Admin Auth Check', req.path);
+  
+  const authHeader = req.get('authorization');
+  if (!authHeader) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Admin access requires authentication',
+      path: req.path
+    });
+  }
+  
+  req.user = { id: 1, role: 'admin', name: 'Admin User' };
+  next();
+});
+
+/**
+ * Path Middleware: /public/*
+ * Public file serving simulation
+ */
+app.use('/public', (req, res, next) => {
+  logExecution('PATH', 'Public Files', req.path);
+  req.isPublic = true;
+  next();
+});
+
+// ============================================
+// 3. ROUTES WITH INLINE MIDDLEWARE
+// Middleware specific to individual routes
+// ============================================
+
+/**
+ * Route: GET /
+ * No inline middleware (simple route)
  */
 app.get('/', (req, res) => {
   res.json({
-    name: 'grokexpress',
-    version: '1.0.0',
-    description: 'A lightweight Express-like Node.js framework',
-    requestId: req.requestId,
-    middlewareOrder: req.middlewareOrder,
+    message: 'grokexpress Middleware Demo',
+    description: 'Demonstrates all middleware types',
+    middlewareTypes: [
+      { type: 'Global', description: 'Runs on every request', count: 3 },
+      { type: 'Path-specific', description: 'Runs for matching paths', paths: ['/api/*', '/admin/*', '/public/*'] },
+      { type: 'Route-level (Inline)', description: 'Specific to individual routes' },
+      { type: 'Error Handler', description: 'Handles errors (4 params)' }
+    ],
     endpoints: [
-      { method: 'GET', path: '/', description: 'API info' },
-      { method: 'GET', path: '/health', description: 'Health check' },
-      { method: 'GET', path: '/users', description: 'List all users' },
-      { method: 'GET', path: '/users/:id', description: 'Get user by ID' },
-      { method: 'POST', path: '/users', description: 'Create user' },
-      { method: 'PUT', path: '/users/:id', description: 'Update user' },
-      { method: 'DELETE', path: '/users/:id', description: 'Delete user' },
-      { method: 'GET', path: '/api/products', description: 'List products (Router)' },
-      { method: 'GET', path: '/api/products/:id', description: 'Get product (Router)' },
-      // Middleware test endpoints
-      { method: 'GET', path: '/blocked', description: 'Test pipeline stopping' },
-      { method: 'GET', path: '/not-blocked', description: 'Test full pipeline' },
-      { method: 'GET', path: '/api/admin/dashboard', description: 'Admin route (requires auth)' },
-      { method: 'GET', path: '/error-test', description: 'Test error handling' },
-      { method: 'GET', path: '/async-test', description: 'Test async middleware' }
+      { method: 'GET', path: '/', description: 'This endpoint' },
+      { method: 'GET', path: '/simple', description: 'Simple route' },
+      { method: 'GET', path: '/with-middleware', description: 'Route with 1 inline middleware' },
+      { method: 'GET', path: '/multi-middleware', description: 'Route with 3 inline middleware' },
+      { method: 'GET', path: '/api/users', description: 'API route with path middleware' },
+      { method: 'GET', path: '/api/users/:id', description: 'API route with params + inline middleware' },
+      { method: 'GET', path: '/admin/dashboard', description: 'Admin route (requires auth)' },
+      { method: 'GET', path: '/public/file.txt', description: 'Public file route' },
+      { method: 'POST', path: '/users', description: 'POST with validation middleware' },
+      { method: 'GET', path: '/error-test', description: 'Trigger error for error handler test' },
+      { method: 'GET', path: '/router-test', description: 'Router with its own middleware' }
     ]
   });
 });
 
 /**
- * Health Check Route
+ * Route: GET /simple
+ * Simple route without inline middleware
  */
-app.get('/health', (req, res) => {
+app.get('/simple', (req, res) => {
   res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
+    message: 'Simple route',
+    middlewareExecuted: 'Global + Path (if applicable)',
     requestId: req.requestId
   });
 });
 
 /**
- * Test Route - Not blocked
- * Demonstrates that middleware order is preserved
+ * Route: GET /with-middleware
+ * Route with 1 inline middleware
  */
-app.get('/not-blocked', (req, res) => {
+app.get('/with-middleware',
+  // Inline Middleware: Add custom header
+  (req, res, next) => {
+    logExecution('INLINE', 'Custom Header', req.path);
+    res.set('X-Custom-Header', 'Added by inline middleware');
+    req.customData = 'from middleware';
+    next();
+  },
+  // Handler
+  (req, res) => {
+    res.json({
+      message: 'Route with single inline middleware',
+      customData: req.customData,
+      header: res.get('X-Custom-Header')
+    });
+  }
+);
+
+/**
+ * Route: GET /multi-middleware
+ * Route with multiple inline middleware
+ */
+app.get('/multi-middleware',
+  // Inline Middleware 1: Validate request
+  (req, res, next) => {
+    logExecution('INLINE', 'Validate Request', req.path);
+    req.validated = true;
+    next();
+  },
+  // Inline Middleware 2: Load data
+  (req, res, next) => {
+    logExecution('INLINE', 'Load Data', req.path);
+    req.loadedData = { items: [1, 2, 3], count: 3 };
+    next();
+  },
+  // Inline Middleware 3: Transform data
+  (req, res, next) => {
+    logExecution('INLINE', 'Transform Data', req.path);
+    req.transformedData = req.loadedData.items.map(x => x * 2);
+    next();
+  },
+  // Handler
+  (req, res) => {
+    res.json({
+      message: 'Route with multiple inline middleware',
+      validated: req.validated,
+      loadedData: req.loadedData,
+      transformedData: req.transformedData
+    });
+  }
+);
+
+// ============================================
+// API ROUTES (with /api path middleware)
+// ============================================
+
+/**
+ * Route: GET /api/users
+ * Uses path middleware from app.use('/api', ...)
+ */
+app.get('/api/users', (req, res) => {
   res.json({
-    message: 'All middleware executed successfully',
-    requestId: req.requestId,
-    middlewareOrder: req.middlewareOrder,
-    startTime: req.startTime
+    message: 'API endpoint',
+    apiVersion: req.apiVersion,
+    isApiRequest: req.isApiRequest,
+    users: [
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' }
+    ]
   });
 });
 
 /**
- * Test Route - Error handling
- * Demonstrates error handling with 4-parameter middleware
+ * Route: GET /api/users/:id
+ * Uses path middleware + inline middleware
+ */
+app.get('/api/users/:id',
+  // Inline Middleware: Validate ID
+  (req, res, next) => {
+    logExecution('INLINE', 'Validate User ID', req.path);
+    const { id } = req.params;
+    
+    if (!id || isNaN(Number(id))) {
+      return res.status(400).json({
+        error: 'Invalid user ID',
+        message: 'ID must be a number'
+      });
+    }
+    
+    req.validatedUserId = id;
+    next();
+  },
+  // Inline Middleware: Load user
+  (req, res, next) => {
+    logExecution('INLINE', 'Load User', req.path);
+    
+    const users = {
+      '1': { id: 1, name: 'Alice', email: 'alice@example.com' },
+      '2': { id: 2, name: 'Bob', email: 'bob@example.com' }
+    };
+    
+    const user = users[req.validatedUserId];
+    if (!user) {
+      return res.status(404).json({
+        error: 'User not found',
+        id: req.validatedUserId
+      });
+    }
+    
+    req.user = user;
+    next();
+  },
+  // Handler
+  (req, res) => {
+    res.json({
+      message: 'User found',
+      apiVersion: req.apiVersion,
+      user: req.user
+    });
+  }
+);
+
+// ============================================
+// ADMIN ROUTES (with /admin path middleware)
+// ============================================
+
+/**
+ * Route: GET /admin/dashboard
+ * Protected by admin path middleware
+ */
+app.get('/admin/dashboard', (req, res) => {
+  res.json({
+    message: 'Admin Dashboard',
+    user: req.user,
+    stats: {
+      users: 100,
+      orders: 500,
+      revenue: 50000
+    }
+  });
+});
+
+// ============================================
+// PUBLIC ROUTES (with /public path middleware)
+// ============================================
+
+/**
+ * Route: GET /public/file.txt
+ * Uses public path middleware
+ */
+app.get('/public/file.txt', (req, res) => {
+  res.type('text').send('This is a public file');
+});
+
+// ============================================
+// POST ROUTE WITH VALIDATION MIDDLEWARE
+// ============================================
+
+/**
+ * Route: POST /users
+ * Multiple inline middleware for validation
+ */
+app.post('/users',
+  // Inline Middleware 1: Parse body
+  async (req, res, next) => {
+    logExecution('INLINE', 'Parse Body', req.path);
+    try {
+      if (req.is('application/json')) {
+        req.body = await req.json();
+      }
+      next();
+    } catch (err) {
+      res.status(400).json({ error: 'Invalid JSON' });
+    }
+  },
+  // Inline Middleware 2: Validate fields
+  (req, res, next) => {
+    logExecution('INLINE', 'Validate Fields', req.path);
+    const { name, email } = req.body || {};
+    
+    if (!name || !email) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'Name and email are required'
+      });
+    }
+    
+    req.validatedData = { name, email };
+    next();
+  },
+  // Handler
+  (req, res) => {
+    const newUser = {
+      id: Date.now(),
+      ...req.validatedData,
+      createdAt: new Date().toISOString()
+    };
+    
+    res.status(201).json({
+      message: 'User created',
+      user: newUser
+    });
+  }
+);
+
+// ============================================
+// ERROR TEST ROUTE
+// ============================================
+
+/**
+ * Route: GET /error-test
+ * Triggers an error to test error handler
  */
 app.get('/error-test', (req, res, next) => {
-  // Trigger an error
   const error = new Error('This is a test error');
   error.status = 400;
   throw error;
 });
 
-/**
- * Test Route - Async operation
- * Demonstrates async route handlers
- */
-app.get('/async-test', async (req, res) => {
-  // Simulate async operation
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
+// ============================================
+// 5. ROUTER WITH MIDDLEWARE
+// Demonstrates router mounting with middleware
+// ============================================
+
+const apiRouter = new Router();
+
+// Router-level middleware
+apiRouter.use((req, res, next) => {
+  logExecution('ROUTER', 'Router Middleware', req.path);
+  req.routerMiddlewareApplied = true;
+  next();
+});
+
+// Router routes
+apiRouter.get('/products', (req, res) => {
   res.json({
-    message: 'Async operation completed',
-    requestId: req.requestId,
-    middlewareOrder: req.middlewareOrder,
-    processingTime: Date.now() - req.startTime
+    message: 'Products from router',
+    routerMiddlewareApplied: req.routerMiddlewareApplied,
+    products: [
+      { id: 1, name: 'Laptop', price: 999 },
+      { id: 2, name: 'Phone', price: 699 }
+    ]
   });
 });
 
-/**
- * Admin Dashboard Route
- * Protected by path-specific middleware
- */
-app.get('/api/admin/dashboard', (req, res) => {
-  res.json({
-    message: 'Welcome to admin dashboard',
-    isAdmin: req.isAdmin,
-    requestId: req.requestId
-  });
-});
-
-// ============================================
-// In-memory data store (for demo purposes)
-// ============================================
-const users = new Map();
-let userIdCounter = 1;
-
-// Seed some users
-users.set('1', { id: '1', name: 'Alice', email: 'alice@example.com' });
-users.set('2', { id: '2', name: 'Bob', email: 'bob@example.com' });
-userIdCounter = 3;
-
-// ============================================
-// User Routes
-// ============================================
-
-/**
- * Get all users
- */
-app.get('/users', (req, res) => {
-  const userList = Array.from(users.values());
-  
-  // Query parameter filtering
-  const { name } = req.query;
-  const filtered = name 
-    ? userList.filter(u => u.name.toLowerCase().includes(name.toLowerCase()))
-    : userList;
-  
-  res.json({
-    users: filtered,
-    count: filtered.length,
-    total: users.size,
-    requestId: req.requestId
-  });
-});
-
-/**
- * Get user by ID
- */
-app.get('/users/:id', (req, res) => {
-  const { id } = req.params;
-  const user = users.get(id);
-  
-  if (!user) {
-    return res.status(404).json({
-      error: 'User not found',
-      id
+apiRouter.get('/products/:id',
+  // Inline middleware for this route
+  (req, res, next) => {
+    logExecution('INLINE', 'Validate Product ID', req.path);
+    const { id } = req.params;
+    if (isNaN(Number(id))) {
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+    next();
+  },
+  (req, res) => {
+    res.json({
+      message: 'Product from router',
+      productId: req.params.id,
+      routerMiddlewareApplied: req.routerMiddlewareApplied
     });
   }
-  
-  res.json({ user, requestId: req.requestId });
-});
+);
+
+// Mount router at /router-test
+app.use('/router-test', apiRouter);
+
+// ============================================
+// 4. ERROR HANDLER MIDDLEWARE
+// Must be registered AFTER all other middleware and routes
+// Signature: (err, req, res, next) => {}
+// ============================================
 
 /**
- * Create new user
+ * Error Handler Middleware
+ * Catches all errors thrown in middleware or routes
  */
-app.post('/users', (req, res) => {
-  const { name, email } = req.body;
-  
-  if (!name || !email) {
-    return res.status(400).json({
-      error: 'Name and email are required'
-    });
-  }
-  
-  const id = String(userIdCounter++);
-  const user = {
-    id,
-    name,
-    email,
-    createdAt: new Date().toISOString()
-  };
-  
-  users.set(id, user);
-  
-  res.status(201).json({
-    message: 'User created successfully',
-    user,
-    requestId: req.requestId
-  });
-});
-
-/**
- * Update user
- */
-app.put('/users/:id', (req, res) => {
-  const { id } = req.params;
-  const existingUser = users.get(id);
-  
-  if (!existingUser) {
-    return res.status(404).json({
-      error: 'User not found',
-      id
-    });
-  }
-  
-  const updatedUser = {
-    ...existingUser,
-    ...req.body,
-    id, // Prevent ID modification
-    updatedAt: new Date().toISOString()
-  };
-  
-  users.set(id, updatedUser);
-  
-  res.json({
-    message: 'User updated successfully',
-    user: updatedUser,
-    requestId: req.requestId
-  });
-});
-
-/**
- * Delete user
- */
-app.delete('/users/:id', (req, res) => {
-  const { id } = req.params;
-  
-  if (!users.has(id)) {
-    return res.status(404).json({
-      error: 'User not found',
-      id
-    });
-  }
-  
-  users.delete(id);
-  
-  res.status(204).end();
-});
-
-// ============================================
-// Router Example - Product Routes
-// ============================================
-
-const productRouter = new Router();
-
-// In-memory products
-const products = new Map([
-  ['1', { id: '1', name: 'Laptop', price: 999.99 }],
-  ['2', { id: '2', name: 'Phone', price: 699.99 }],
-  ['3', { id: '3', name: 'Tablet', price: 499.99 }]
-]);
-
-// Product middleware - runs for all product routes
-productRouter.use(async (req, res, next) => {
-  console.log(`[Product Router] ${req.method} ${req.path}`);
-  await next();
-});
-
-// Get all products
-productRouter.get('/products', (req, res) => {
-  res.json({
-    products: Array.from(products.values()),
-    count: products.size,
-    requestId: req.requestId
-  });
-});
-
-// Get product by ID
-productRouter.get('/products/:id', (req, res) => {
-  const { id } = req.params;
-  const product = products.get(id);
-  
-  if (!product) {
-    return res.status(404).json({ error: 'Product not found' });
-  }
-  
-  res.json({ product, requestId: req.requestId });
-});
-
-// Mount the router at /api
-app.use('/api', productRouter);
-
-// ============================================
-// Error Handler (4 parameters: err, req, res, next)
-// ============================================
-
 app.use((err, req, res, next) => {
-  console.error('[Error Handler]', err.message);
+  logExecution('ERROR', 'Error Handler', req.path);
   
-  res.status(err.status || 500).json({
+  console.error('[ErrorHandler]', err.message);
+  
+  const status = err.status || err.statusCode || 500;
+  
+  res.status(status).json({
     error: {
       message: err.message || 'Internal Server Error',
-      status: err.status || 500,
-      timestamp: new Date().toISOString(),
+      status: status,
       path: req.path,
-      requestId: req.requestId
+      requestId: req.requestId,
+      timestamp: new Date().toISOString()
     }
   });
 });
@@ -468,28 +476,39 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, (address) => {
   console.log(`\n✅ Server started successfully!`);
   console.log(`📍 Listening on: http://localhost:${address.port}`);
-  console.log(`\n📋 Try these endpoints:\n`);
-  console.log(`   # Basic routes`);
-  console.log(`   curl http://localhost:${address.port}/`);
-  console.log(`   curl http://localhost:${address.port}/health`);
-  console.log(`\n   # Middleware test - Pipeline stopping`);
-  console.log(`   curl http://localhost:${address.port}/blocked`);
-  console.log(`   curl http://localhost:${address.port}/not-blocked`);
-  console.log(`\n   # Middleware test - Execution order (check middlewareOrder array)`);
-  console.log(`   curl http://localhost:${address.port}/ | jq '.middlewareOrder'`);
-  console.log(`\n   # Middleware test - Path-specific middleware (admin auth)`);
-  console.log(`   curl http://localhost:${address.port}/api/admin/dashboard`);
-  console.log(`   curl -H "Authorization: Bearer token" http://localhost:${address.port}/api/admin/dashboard`);
-  console.log(`\n   # Middleware test - Error handling`);
-  console.log(`   curl http://localhost:${address.port}/error-test`);
-  console.log(`\n   # Middleware test - Async middleware`);
-  console.log(`   curl http://localhost:${address.port}/async-test`);
-  console.log(`\n   # User CRUD operations`);
-  console.log(`   curl http://localhost:${address.port}/users`);
-  console.log(`   curl http://localhost:${address.port}/users/1`);
-  console.log(`   curl -X POST http://localhost:${address.port}/users -H "Content-Type: application/json" -d '{"name":"John","email":"john@example.com"}'`);
-  console.log(`\n   # Router example`);
-  console.log(`   curl http://localhost:${address.port}/api/products`);
-  console.log(``);
+  
+  console.log(`\n📋 Test Commands:\n`);
+  
+  console.log('# 1. Global Middleware Tests');
+  console.log(`curl http://localhost:${address.port}/`);
+  console.log(`curl http://localhost:${address.port}/simple`);
+  console.log(`curl -I http://localhost:${address.port}/ 2>/dev/null | grep -E '(X-Content|Access-Control)'`);
+  
+  console.log('\n# 2. Path-specific Middleware Tests');
+  console.log(`curl http://localhost:${address.port}/api/users`);
+  console.log(`curl http://localhost:${address.port}/public/file.txt`);
+  console.log(`curl http://localhost:${address.port}/admin/dashboard`);
+  console.log(`curl -H "Authorization: Bearer token" http://localhost:${address.port}/admin/dashboard`);
+  
+  console.log('\n# 3. Inline Middleware Tests');
+  console.log(`curl http://localhost:${address.port}/with-middleware`);
+  console.log(`curl http://localhost:${address.port}/multi-middleware`);
+  console.log(`curl http://localhost:${address.port}/api/users/1`);
+  console.log(`curl http://localhost:${address.port}/api/users/999`);
+  console.log(`curl http://localhost:${address.port}/api/users/abc`);
+  
+  console.log('\n# 4. POST with Validation');
+  console.log(`curl -X POST http://localhost:${address.port}/users -H "Content-Type: application/json" -d '{"name":"John","email":"john@example.com"}'`);
+  console.log(`curl -X POST http://localhost:${address.port}/users -H "Content-Type: application/json" -d '{"name":"John"}'`);
+  
+  console.log('\n# 5. Error Handler Test');
+  console.log(`curl http://localhost:${address.port}/error-test`);
+  
+  console.log('\n# 6. Router with Middleware');
+  console.log(`curl http://localhost:${address.port}/router-test/products`);
+  console.log(`curl http://localhost:${address.port}/router-test/products/1`);
+  console.log(`curl http://localhost:${address.port}/router-test/products/abc`);
+  
+  console.log('');
 });
 

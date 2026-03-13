@@ -6,95 +6,213 @@
 import http from 'node:http';
 import { Request } from './request.js';
 import { Response } from './response.js';
-import { MiddlewareStack, MiddlewarePipeline } from './middleware.js';
 import { Router } from './router.js';
 import { RouteTable } from './route-table.js';
 import { RouteExecutor } from './route-executor.js';
-import { normalizePath } from './utils.js';
+import { normalizePath, pathMatches } from './utils.js';
+
+/**
+ * Layer types for middleware processing
+ */
+const LayerType = {
+  GLOBAL: 'global',           // Global middleware (app.use(fn))
+  PATH: 'path',               // Path-specific middleware (app.use('/path', fn))
+  ROUTE: 'route',             // Route handlers (app.get('/path', fn))
+  ERROR: 'error'              // Error handlers (app.use((err, req, res, next) => {}))
+};
 
 /**
  * Create Application - Main factory function
- * Creates an Express-like application with middleware support
+ * Creates an Express-like application with full middleware support
  * 
  * @returns {Object} App object with use, listen, and route methods
  */
 export function createApplication() {
-  const middlewareStack = new MiddlewareStack();
+  // Global middleware stack (runs for all requests)
+  const globalMiddleware = [];
+  
+  // Path-specific middleware (runs for matching paths)
+  const pathMiddleware = [];
+  
+  // Route table (stores routes with their inline middleware)
   const routeTable = new RouteTable();
+  
+  // Error handlers (4-parameter middleware)
+  const errorHandlers = [];
+  
   let server = null;
-  let customErrorHandler = null;
   
   /**
-   * Main request handler - processes all middleware in order
+   * Main request handler
+   * Execution order:
+   * 1. Global middleware
+   * 2. Path-specific middleware (matching request path)
+   * 3. Route handler (with its inline middleware chain)
+   * 4. Error handlers (if error occurred)
    */
   async function handler(req, res) {
     // Wrap native request/response
     const request = new Request(req);
     const response = new Response(res);
     
-    // Find matching route
-    const { route, params } = routeTable.find(request.method, request.path);
+    // Store middleware execution order for debugging
+    request.middlewareChain = [];
     
-    // If route found, execute it
-    if (route) {
-      try {
+    try {
+      // Phase 1: Execute global middleware
+      const globalResult = await executeMiddlewareStack(
+        globalMiddleware,
+        request,
+        response,
+        (mw) => true // All global middleware runs for all requests
+      );
+      
+      if (globalResult.ended) {
+        return; // Response sent by global middleware
+      }
+      
+      // Phase 2: Execute path-specific middleware
+      const pathResult = await executeMiddlewareStack(
+        pathMiddleware,
+        request,
+        response,
+        (mw) => pathMatches(mw.path, request.path)
+      );
+      
+      if (pathResult.ended) {
+        return; // Response sent by path middleware
+      }
+      
+      // Phase 3: Find and execute route
+      const { route, params } = routeTable.find(request.method, request.path);
+      
+      if (route) {
         await RouteExecutor.execute(route, request, response, params);
         
-        // If response not sent after route execution, continue to 404
+        // If response not sent after route execution, send 404
         if (!response.headersSent && !response.writableEnded) {
-          response.status(404).json({
-            error: 'Not Found',
-            path: request.path,
-            status: 404
-          });
-        }
-        return;
-      } catch (err) {
-        // Handle error
-        if (customErrorHandler) {
-          customErrorHandler(err, request, response, () => {});
-        } else {
-          response.status(err.status || 500).json({
-            error: {
-              message: err.message || 'Internal Server Error',
-              status: err.status || 500,
-              timestamp: new Date().toISOString()
-            }
-          });
+          await send404(response, request);
         }
         return;
       }
+      
+      // No route matched - send 404
+      await send404(response, request);
+      
+    } catch (err) {
+      // Phase 4: Error handling
+      await handleError(err, request, response);
     }
-    
-    // No route matched - try middleware pipeline
-    const pipeline = new MiddlewarePipeline(
-      middlewareStack.getAll(),
-      customErrorHandler ? [{ handler: customErrorHandler }] : []
-    );
-    
-    // Execute pipeline
-    await pipeline.execute(request, response, () => {
-      // On complete - if no response sent, send 404
-      if (!response.headersSent && !response.writableEnded) {
-        response.status(404).json({
-          error: 'Not Found',
-          path: request.path,
-          status: 404
-        });
-      }
-    });
   }
   
   /**
-   * Helper to flatten arguments for route registration
-   * Handles: app.get('/path', handler)
-   *          app.get('/path', middleware, handler)
-   *          app.get('/path', mw1, mw2, ..., handler)
+   * Execute a stack of middleware
+   * @param {Array} stack - Middleware stack
+   * @param {Request} request - Request object
+   * @param {Response} response - Response object
+   * @param {Function} shouldRun - Function to determine if middleware should run
+   * @returns {{ ended: boolean }} Whether the response was sent
    */
-  function flattenHandlers(args) {
-    // args = [path, handler1, handler2, ...]
-    // Return array of all handlers
-    return args.slice(1);
+  async function executeMiddlewareStack(stack, request, response, shouldRun) {
+    let index = 0;
+    let ended = false;
+    
+    async function next(err) {
+      // If error passed, throw it
+      if (err) {
+        throw err;
+      }
+      
+      // If response already sent, stop
+      if (response.headersSent || response.writableEnded) {
+        ended = true;
+        return;
+      }
+      
+      // Find next matching middleware
+      while (index < stack.length) {
+        const middleware = stack[index++];
+        
+        if (shouldRun(middleware)) {
+          // Execute middleware
+          const result = middleware.handler(request, response, next);
+          
+          // Handle async middleware
+          if (result && typeof result.then === 'function') {
+            await result;
+          }
+          
+          // Check if response was sent
+          if (response.headersSent || response.writableEnded) {
+            ended = true;
+          }
+          
+          return;
+        }
+      }
+    }
+    
+    await next();
+    return { ended };
+  }
+  
+  /**
+   * Handle errors using registered error handlers
+   */
+  async function handleError(err, request, response) {
+    console.error('[Error]', err.message || 'Unknown error');
+    
+    // Try custom error handlers first
+    for (const handler of errorHandlers) {
+      try {
+        // Error handlers have signature: (err, req, res, next)
+        const result = handler(request, response, () => {}, err);
+        
+        if (result && typeof result.then === 'function') {
+          await result;
+        }
+        
+        // If response sent by error handler, stop
+        if (response.headersSent || response.writableEnded) {
+          return;
+        }
+      } catch (handlerErr) {
+        console.error('[Error Handler Failed]', handlerErr);
+      }
+    }
+    
+    // Default error response
+    if (!response.headersSent && !response.writableEnded) {
+      const status = err.status || err.statusCode || 500;
+      response.status(status).json({
+        error: {
+          message: err.message || 'Internal Server Error',
+          status,
+          timestamp: new Date().toISOString(),
+          path: request.path
+        }
+      });
+    }
+  }
+  
+  /**
+   * Send 404 response
+   */
+  async function send404(response, request) {
+    if (!response.headersSent && !response.writableEnded) {
+      response.status(404).json({
+        error: 'Not Found',
+        path: request.path,
+        status: 404
+      });
+    }
+  }
+  
+  /**
+   * Check if a function is an error handler (4 parameters)
+   */
+  function isErrorHandler(fn) {
+    return fn.length === 4;
   }
   
   /**
@@ -102,47 +220,68 @@ export function createApplication() {
    */
   const app = {
     /**
-     * Add middleware or mount router
+     * Add middleware
      * 
-     * Middleware signature: (req, res, next) => {}
-     * Error handler signature: (err, req, res, next) => {}
+     * Supports:
+     * - Global middleware: app.use((req, res, next) => {})
+     * - Path-specific: app.use('/path', (req, res, next) => {})
+     * - Error handler: app.use((err, req, res, next) => {})
+     * - Router mounting: app.use(router) or app.use('/prefix', router)
      * 
-     * @param {string|Function|Router} path - Path, middleware function, or Router
-     * @param {Function|Router} middleware - Middleware function or Router (optional)
+     * @param {string|Function|Router} path - Path, middleware, or Router
+     * @param {Function|Router} middleware - Middleware or Router
      */
     use(path, middleware) {
-      // Handle router mounting without path
+      // Case 1: Router mounting without path - app.use(router)
       if (path instanceof Router) {
-        const router = path;
-        this._mountRouter(router, '/');
+        this._mountRouter(path, '/');
         return app;
       }
       
-      // Handle router mounting with path prefix
+      // Case 2: Router mounting with path - app.use('/api', router)
       if (typeof path === 'string' && middleware instanceof Router) {
         this._mountRouter(middleware, path);
         return app;
       }
       
-      // Handle error handler (4 parameters)
-      if (typeof path === 'function' && path.length === 4) {
-        customErrorHandler = path;
+      // Case 3: Error handler without path - app.use((err, req, res, next) => {})
+      if (typeof path === 'function' && isErrorHandler(path)) {
+        errorHandlers.push(path);
         return app;
       }
       
+      // Case 4: Global middleware without path - app.use((req, res, next) => {})
       if (typeof path === 'function' && middleware === undefined) {
-        middleware = path;
-        path = '/';
-      }
-      
-      // Handle error handler middleware (4 parameters)
-      if (middleware.length === 4) {
-        customErrorHandler = middleware;
+        if (isErrorHandler(path)) {
+          errorHandlers.push(path);
+        } else {
+          globalMiddleware.push({
+            type: LayerType.GLOBAL,
+            path: '/',
+            handler: path
+          });
+        }
         return app;
       }
       
-      middlewareStack.use(path, middleware);
-      return app;
+      // Case 5: Error handler with path - app.use('/path', (err, req, res, next) => {})
+      if (typeof path === 'string' && isErrorHandler(middleware)) {
+        // Error handlers with path are treated as global but only run for that path
+        errorHandlers.push(middleware);
+        return app;
+      }
+      
+      // Case 6: Path-specific middleware - app.use('/path', (req, res, next) => {})
+      if (typeof path === 'string' && typeof middleware === 'function') {
+        pathMiddleware.push({
+          type: LayerType.PATH,
+          path: path,
+          handler: middleware
+        });
+        return app;
+      }
+      
+      throw new Error('Invalid middleware arguments');
     },
     
     /**
@@ -155,26 +294,28 @@ export function createApplication() {
         const fullPath = normalizedPrefix + (item.path.startsWith('/') ? item.path : '/' + item.path);
         
         if (item.isRoute) {
-          routeTable.register(item.method, fullPath, item.handler);
+          // Register route with its inline middleware (spread handlers array)
+          routeTable.register(item.method, fullPath, ...item.handlers);
         } else if (item.isError) {
-          customErrorHandler = item.handler;
+          // Router error handler
+          errorHandlers.push(item.handler);
         } else {
-          middlewareStack.use(fullPath, item.handler);
+          // Router middleware becomes path-specific middleware
+          pathMiddleware.push({
+            type: LayerType.PATH,
+            path: fullPath,
+            handler: item.handler
+          });
         }
       });
     },
     
     /**
-     * Set custom error handler
-     * Signature: (err, req, res, next) => {}
+     * Route registration methods with inline middleware support
      */
-    setErrorHandler(handler) {
-      customErrorHandler = handler;
-      return app;
-    },
     
     /**
-     * GET route - supports multiple middleware
+     * GET route - supports multiple inline middleware
      * app.get('/path', handler)
      * app.get('/path', middleware, handler)
      * app.get('/path', mw1, mw2, ..., handler)
@@ -185,7 +326,7 @@ export function createApplication() {
     },
     
     /**
-     * POST route - supports multiple middleware
+     * POST route - supports multiple inline middleware
      */
     post(path, ...handlers) {
       routeTable.register('POST', path, ...handlers);
@@ -193,7 +334,7 @@ export function createApplication() {
     },
     
     /**
-     * PUT route - supports multiple middleware
+     * PUT route - supports multiple inline middleware
      */
     put(path, ...handlers) {
       routeTable.register('PUT', path, ...handlers);
@@ -201,7 +342,7 @@ export function createApplication() {
     },
     
     /**
-     * PATCH route - supports multiple middleware
+     * PATCH route - supports multiple inline middleware
      */
     patch(path, ...handlers) {
       routeTable.register('PATCH', path, ...handlers);
@@ -209,7 +350,7 @@ export function createApplication() {
     },
     
     /**
-     * DELETE route - supports multiple middleware
+     * DELETE route - supports multiple inline middleware
      */
     delete(path, ...handlers) {
       routeTable.register('DELETE', path, ...handlers);
@@ -217,7 +358,7 @@ export function createApplication() {
     },
     
     /**
-     * HEAD route - supports multiple middleware
+     * HEAD route - supports multiple inline middleware
      */
     head(path, ...handlers) {
       routeTable.register('HEAD', path, ...handlers);
@@ -225,7 +366,7 @@ export function createApplication() {
     },
     
     /**
-     * OPTIONS route - supports multiple middleware
+     * OPTIONS route - supports multiple inline middleware
      */
     options(path, ...handlers) {
       routeTable.register('OPTIONS', path, ...handlers);
@@ -233,7 +374,7 @@ export function createApplication() {
     },
     
     /**
-     * All methods route - supports multiple middleware
+     * All methods route - supports multiple inline middleware
      */
     all(path, ...handlers) {
       routeTable.register('*', path, ...handlers);
@@ -241,10 +382,16 @@ export function createApplication() {
     },
     
     /**
+     * Set custom error handler (legacy method)
+     * @deprecated Use app.use((err, req, res, next) => {}) instead
+     */
+    setErrorHandler(handler) {
+      errorHandlers.push(handler);
+      return app;
+    },
+    
+    /**
      * Listen on port
-     * @param {number} port - Port number
-     * @param {Function} callback - Callback function (optional)
-     * @returns {Promise<http.Server>}
      */
     listen(port, callback) {
       server = http.createServer(handler);
@@ -254,7 +401,13 @@ export function createApplication() {
           const address = server.address();
           console.log(`🚀 grokexpress server running on http://localhost:${address.port}`);
           
-          // Print route table for debugging
+          // Debug info
+          console.log(`\n📊 Middleware Stack:`);
+          console.log(`  Global: ${globalMiddleware.length}`);
+          console.log(`  Path-specific: ${pathMiddleware.length}`);
+          console.log(`  Error handlers: ${errorHandlers.length}`);
+          
+          // Print route table
           routeTable.print();
           
           if (callback) {
@@ -269,7 +422,6 @@ export function createApplication() {
     
     /**
      * Close server
-     * @returns {Promise<void>}
      */
     close() {
       return new Promise((resolve, reject) => {
@@ -292,14 +444,28 @@ export function createApplication() {
     },
     
     /**
-     * Get middleware stack (for debugging)
+     * Get global middleware stack
      */
-    getStack() {
-      return middlewareStack.getAll();
+    getGlobalMiddleware() {
+      return [...globalMiddleware];
     },
     
     /**
-     * Get route table (for debugging)
+     * Get path-specific middleware
+     */
+    getPathMiddleware() {
+      return [...pathMiddleware];
+    },
+    
+    /**
+     * Get error handlers
+     */
+    getErrorHandlers() {
+      return [...errorHandlers];
+    },
+    
+    /**
+     * Get route table
      */
     getRouteTable() {
       return routeTable;

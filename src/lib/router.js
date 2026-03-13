@@ -39,120 +39,120 @@ export class Router {
   }
   
   /**
-   * Add GET route
+   * Add GET route with optional inline middleware
    * @param {string} path - Route path
-   * @param {Function} handler - Route handler
+   * @param {...Function} handlers - Middleware and final handler
    */
-  get(path, handler) {
+  get(path, ...handlers) {
     this.stack.push({
       method: 'GET',
       path,
-      handler,
+      handlers, // Array of all handlers
       isRoute: true
     });
     return this;
   }
   
   /**
-   * Add POST route
+   * Add POST route with optional inline middleware
    * @param {string} path - Route path
-   * @param {Function} handler - Route handler
+   * @param {...Function} handlers - Middleware and final handler
    */
-  post(path, handler) {
+  post(path, ...handlers) {
     this.stack.push({
       method: 'POST',
       path,
-      handler,
+      handlers,
       isRoute: true
     });
     return this;
   }
   
   /**
-   * Add PUT route
+   * Add PUT route with optional inline middleware
    * @param {string} path - Route path
-   * @param {Function} handler - Route handler
+   * @param {...Function} handlers - Middleware and final handler
    */
-  put(path, handler) {
+  put(path, ...handlers) {
     this.stack.push({
       method: 'PUT',
       path,
-      handler,
+      handlers,
       isRoute: true
     });
     return this;
   }
   
   /**
-   * Add PATCH route
+   * Add PATCH route with optional inline middleware
    * @param {string} path - Route path
-   * @param {Function} handler - Route handler
+   * @param {...Function} handlers - Middleware and final handler
    */
-  patch(path, handler) {
+  patch(path, ...handlers) {
     this.stack.push({
       method: 'PATCH',
       path,
-      handler,
+      handlers,
       isRoute: true
     });
     return this;
   }
   
   /**
-   * Add DELETE route
+   * Add DELETE route with optional inline middleware
    * @param {string} path - Route path
-   * @param {Function} handler - Route handler
+   * @param {...Function} handlers - Middleware and final handler
    */
-  delete(path, handler) {
+  delete(path, ...handlers) {
     this.stack.push({
       method: 'DELETE',
       path,
-      handler,
+      handlers,
       isRoute: true
     });
     return this;
   }
   
   /**
-   * Add route for all HTTP methods
+   * Add route for all HTTP methods with optional inline middleware
    * @param {string} path - Route path
-   * @param {Function} handler - Route handler
+   * @param {...Function} handlers - Middleware and final handler
    */
-  all(path, handler) {
+  all(path, ...handlers) {
     this.stack.push({
       method: '*',
       path,
-      handler,
+      handlers,
       isRoute: true
     });
     return this;
   }
   
   /**
-   * Add HEAD route
+   * Add HEAD route with optional inline middleware
    * @param {string} path - Route path
-   * @param {Function} handler - Route handler
+   * @param {...Function} handlers - Middleware and final handler
    */
-  head(path, handler) {
+  head(path, ...handlers) {
     this.stack.push({
       method: 'HEAD',
       path,
-      handler,
+      handlers,
       isRoute: true
     });
     return this;
   }
   
   /**
-   * Add OPTIONS route
+   * Add OPTIONS route with optional inline middleware
    * @param {string} path - Route path
-   * @param {Function} handler - Route handler
+   * @param {...Function} handlers - Middleware and final handler
    */
-  options(path, handler) {
+  options(path, ...handlers) {
     this.stack.push({
       method: 'OPTIONS',
       path,
-      handler,
+      handlers,
       isRoute: true
     });
     return this;
