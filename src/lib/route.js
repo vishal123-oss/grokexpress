@@ -3,7 +3,7 @@
  * @module route
  */
 
-import { matchPath } from './utils.js';
+import { matchPath } from '../utils/index.js';
 
 /**
  * Route class - Represents a single route definition

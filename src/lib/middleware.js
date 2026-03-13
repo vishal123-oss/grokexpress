@@ -3,7 +3,7 @@
  * @module middleware
  */
 
-import { pathMatches, matchPath } from './utils.js';
+import { pathMatches, matchPath } from '../utils/index.js';
 
 /**
  * Middleware layer types

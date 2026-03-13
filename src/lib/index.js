@@ -8,10 +8,11 @@ import { createApplication, Router, grok } from './application.js';
 import { Request } from './request.js';
 import { Response } from './response.js';
 import { MiddlewareStack, MiddlewarePipeline } from './middleware.js';
-import { matchPath, pathMatches, normalizePath } from './utils.js';
+import { matchPath, pathMatches, normalizePath } from '../utils/index.js';
 import { Route, createRoute } from './route.js';
 import { RouteTable, createRouteTable } from './route-table.js';
 import { RouteExecutor, executeRoute } from './route-executor.js';
+import { STATUS_CODES, MIME_TYPES, RESPONSE_CONTENT_TYPES } from '../constants.js';
 
 // Main exports
 export { createApplication, Router, grok, Request, Response };
@@ -21,6 +22,9 @@ export { MiddlewareStack, MiddlewarePipeline };
 
 // Utility exports
 export { matchPath, pathMatches, normalizePath };
+
+// Constants exports
+export { STATUS_CODES, MIME_TYPES, RESPONSE_CONTENT_TYPES };
 
 // Route system exports
 export { Route, createRoute };

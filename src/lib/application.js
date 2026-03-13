@@ -9,7 +9,7 @@ import { Response } from './response.js';
 import { Router } from './router.js';
 import { RouteTable } from './route-table.js';
 import { RouteExecutor } from './route-executor.js';
-import { normalizePath, pathMatches } from './utils.js';
+import { normalizePath, pathMatches } from '../utils/index.js';
 
 /**
  * Layer types for middleware processing

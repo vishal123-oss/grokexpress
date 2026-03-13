@@ -3,7 +3,7 @@
  * @module router
  */
 
-import { matchPath } from './utils.js';
+import { matchPath } from '../utils/index.js';
 
 /**
  * Router class for grouping routes and middleware
