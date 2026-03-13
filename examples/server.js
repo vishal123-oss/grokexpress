@@ -151,7 +151,21 @@ app.get('/', (req, res) => {
       { method: 'GET', path: '/public/file.txt', description: 'Public file route' },
       { method: 'POST', path: '/users', description: 'POST with validation middleware' },
       { method: 'GET', path: '/error-test', description: 'Trigger error for error handler test' },
-      { method: 'GET', path: '/router-test', description: 'Router with its own middleware' }
+      { method: 'GET', path: '/router-test', description: 'Router with its own middleware' },
+      // Response methods tests
+      { method: 'GET', path: '/response/status', description: 'res.status() test' },
+      { method: 'GET', path: '/response/send-status', description: 'res.sendStatus() test' },
+      { method: 'GET', path: '/response/send-string', description: 'res.send() string' },
+      { method: 'GET', path: '/response/send-object', description: 'res.send() object' },
+      { method: 'GET', path: '/response/text', description: 'res.text()' },
+      { method: 'GET', path: '/response/html', description: 'res.html()' },
+      { method: 'GET', path: '/response/xml', description: 'res.xml()' },
+      { method: 'GET', path: '/response/headers', description: 'res.set() / res.get()' },
+      { method: 'GET', path: '/response/cookie', description: 'res.cookie()' },
+      { method: 'GET', path: '/response/redirect', description: 'res.redirect()' },
+      { method: 'GET', path: '/response/format', description: 'res.format()' },
+      { method: 'GET', path: '/response/chain', description: 'Method chaining' },
+      { method: 'GET', path: '/response/jsonp', description: 'res.jsonp()' }
     ]
   });
 });
@@ -440,6 +454,261 @@ apiRouter.get('/products/:id',
 app.use('/router-test', apiRouter);
 
 // ============================================
+// 6. RESPONSE METHODS TESTS
+// Comprehensive tests for all Response methods
+// ============================================
+
+/**
+ * Test: res.status() and res.json() chaining
+ */
+app.get('/response/status', (req, res) => {
+  res.status(201).json({ message: 'Created', status: 201 });
+});
+
+/**
+ * Test: res.sendStatus()
+ */
+app.get('/response/send-status', (req, res) => {
+  res.sendStatus(404);
+});
+
+/**
+ * Test: res.send() with different types
+ */
+app.get('/response/send-string', (req, res) => {
+  res.send('Hello World as plain text');
+});
+
+app.get('/response/send-html', (req, res) => {
+  res.send('<h1>Hello World</h1><p>This is HTML</p>');
+});
+
+app.get('/response/send-object', (req, res) => {
+  res.send({ message: 'Auto-converted to JSON', type: 'object' });
+});
+
+/**
+ * Test: res.text()
+ */
+app.get('/response/text', (req, res) => {
+  res.text('This is plain text response');
+});
+
+/**
+ * Test: res.html()
+ */
+app.get('/response/html', (req, res) => {
+  res.html('<!DOCTYPE html><html><body><h1>HTML Response</h1></body></html>');
+});
+
+/**
+ * Test: res.xml()
+ */
+app.get('/response/xml', (req, res) => {
+  res.xml('<?xml version="1.0"?><root><message>Hello XML</message></root>');
+});
+
+/**
+ * Test: res.type() shorthand
+ */
+app.get('/response/type', (req, res) => {
+  res.type('json').send('{"custom": "json"}');
+});
+
+/**
+ * Test: res.set() and res.get()
+ */
+app.get('/response/headers', (req, res) => {
+  res.set('X-Custom-Header', 'custom-value');
+  res.set({
+    'X-Another-Header': 'another-value',
+    'X-Request-ID': '12345'
+  });
+  
+  res.json({
+    message: 'Headers set',
+    'X-Custom-Header': res.get('X-Custom-Header'),
+    'X-Another-Header': res.get('X-Another-Header'),
+    allHeaders: res.getHeaders()
+  });
+});
+
+/**
+ * Test: res.append()
+ */
+app.get('/response/append', (req, res) => {
+  res.append('X-Multi-Value', 'value1');
+  res.append('X-Multi-Value', 'value2');
+  res.append('Set-Cookie', 'cookie1=value1');
+  res.append('Set-Cookie', 'cookie2=value2');
+  
+  res.json({ message: 'Headers appended' });
+});
+
+/**
+ * Test: res.links()
+ */
+app.get('/response/links', (req, res) => {
+  res.links({
+    next: 'https://api.example.com/users?page=2',
+    last: 'https://api.example.com/users?page=5',
+    first: 'https://api.example.com/users?page=1'
+  });
+  
+  res.json({ message: 'Link headers set' });
+});
+
+/**
+ * Test: res.location()
+ */
+app.get('/response/location', (req, res) => {
+  res.location('/new-path');
+  res.json({ message: 'Location header set', location: res.get('Location') });
+});
+
+/**
+ * Test: res.vary()
+ */
+app.get('/response/vary', (req, res) => {
+  res.vary('Accept');
+  res.vary(['Accept-Encoding', 'Accept-Language']);
+  res.vary('Accept'); // Duplicate should be ignored
+  
+  res.json({ message: 'Vary header set', vary: res.get('Vary') });
+});
+
+/**
+ * Test: res.redirect()
+ */
+app.get('/response/redirect', (req, res) => {
+  res.redirect('/response/redirect-target');
+});
+
+app.get('/response/redirect-target', (req, res) => {
+  res.json({ message: 'Redirect successful!' });
+});
+
+app.get('/response/redirect-301', (req, res) => {
+  res.redirect('/response/redirect-target', 301);
+});
+
+/**
+ * Test: res.cookie() and res.clearCookie()
+ */
+app.get('/response/cookie', (req, res) => {
+  res.cookie('session', 'abc123', { 
+    maxAge: 900000, 
+    httpOnly: true,
+    path: '/',
+    sameSite: 'strict'
+  });
+  res.cookie('preferences', 'dark-mode', { maxAge: 86400000 });
+  
+  res.json({ message: 'Cookies set' });
+});
+
+app.get('/response/clear-cookie', (req, res) => {
+  res.clearCookie('session');
+  res.json({ message: 'Cookie cleared' });
+});
+
+/**
+ * Test: res.format() - Content Negotiation
+ */
+app.get('/response/format', (req, res) => {
+  res.format({
+    'text/html': () => {
+      res.send('<h1>HTML Response</h1>');
+    },
+    'application/json': () => {
+      res.json({ message: 'JSON Response' });
+    },
+    'text/plain': () => {
+      res.text('Plain Text Response');
+    },
+    default: () => {
+      res.status(406).send('Not Acceptable');
+    }
+  });
+});
+
+/**
+ * Test: res.attachment()
+ */
+app.get('/response/attachment', (req, res) => {
+  res.attachment('document.pdf');
+  res.send('PDF content would go here');
+});
+
+/**
+ * Test: res.notFound()
+ */
+app.get('/response/not-found', (req, res) => {
+  res.notFound('Custom not found message');
+});
+
+/**
+ * Test: res.error()
+ */
+app.get('/response/server-error', (req, res) => {
+  res.error('Something went wrong', 500);
+});
+
+/**
+ * Test: res.hasHeader() and res.removeHeader()
+ */
+app.get('/response/header-check', (req, res) => {
+  res.set('X-Test-Header', 'test-value');
+  const hasHeader = res.hasHeader('X-Test-Header');
+  res.removeHeader('X-Test-Header');
+  const hasAfterRemove = res.hasHeader('X-Test-Header');
+  
+  res.json({
+    hasBeforeRemove: hasHeader,
+    hasAfterRemove: hasAfterRemove
+  });
+});
+
+/**
+ * Test: res.locals()
+ */
+app.get('/response/locals', (req, res) => {
+  res.locals('user', { id: 1, name: 'John' });
+  res.locals({ timestamp: Date.now(), requestId: 'req-123' });
+  
+  res.json({
+    message: 'Locals set',
+    locals: res.getLocals()
+  });
+});
+
+/**
+ * Test: Chaining multiple methods
+ */
+app.get('/response/chain', (req, res) => {
+  res
+    .status(201)
+    .set('X-Custom', 'value')
+    .cookie('test', 'value', { maxAge: 10000 })
+    .links({ next: '/next', prev: '/prev' })
+    .json({ message: 'All methods chained successfully!' });
+});
+
+/**
+ * Test: res.end()
+ */
+app.get('/response/end', (req, res) => {
+  res.status(204).end();
+});
+
+/**
+ * Test: res.jsonp()
+ */
+app.get('/response/jsonp', (req, res) => {
+  res.jsonp({ message: 'JSONP response', data: [1, 2, 3] }, 'myCallback');
+});
+
+// ============================================
 // 4. ERROR HANDLER MIDDLEWARE
 // Must be registered AFTER all other middleware and routes
 // Signature: (err, req, res, next) => {}
@@ -508,6 +777,24 @@ app.listen(PORT, (address) => {
   console.log(`curl http://localhost:${address.port}/router-test/products`);
   console.log(`curl http://localhost:${address.port}/router-test/products/1`);
   console.log(`curl http://localhost:${address.port}/router-test/products/abc`);
+  
+  console.log('\n# 7. Response Methods Tests');
+  console.log(`curl http://localhost:${address.port}/response/status`);
+  console.log(`curl http://localhost:${address.port}/response/send-status`);
+  console.log(`curl http://localhost:${address.port}/response/send-string`);
+  console.log(`curl http://localhost:${address.port}/response/send-object`);
+  console.log(`curl http://localhost:${address.port}/response/text`);
+  console.log(`curl http://localhost:${address.port}/response/html`);
+  console.log(`curl http://localhost:${address.port}/response/xml`);
+  console.log(`curl http://localhost:${address.port}/response/headers`);
+  console.log(`curl -I http://localhost:${address.port}/response/cookie`);
+  console.log(`curl -L http://localhost:${address.port}/response/redirect`);
+  console.log(`curl -H "Accept: application/json" http://localhost:${address.port}/response/format`);
+  console.log(`curl -H "Accept: text/html" http://localhost:${address.port}/response/format`);
+  console.log(`curl http://localhost:${address.port}/response/chain`);
+  console.log(`curl http://localhost:${address.port}/response/jsonp`);
+  console.log(`curl http://localhost:${address.port}/response/not-found`);
+  console.log(`curl http://localhost:${address.port}/response/server-error`);
   
   console.log('');
 });
