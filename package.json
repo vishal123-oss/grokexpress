@@ -1,0 +1,37 @@
+{
+  "name": "grokexpress",
+  "version": "1.0.0",
+  "description": "A lightweight Express-like Node.js framework",
+  "main": "src/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test test/**/*.test.js",
+    "build": "echo 'Build step - no compilation needed for ES modules'",
+    "lint": "echo 'Add linter like ESLint here'"
+  },
+  "keywords": [
+    "express",
+    "framework",
+    "web",
+    "server",
+    "http",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/username/grokexpress.git"
+  },
+  "bugs": {
+    "url": "https://github.com/username/grokexpress/issues"
+  },
+  "homepage": "https://github.com/username/grokexpress#readme",
+  "dependencies": {},
+  "devDependencies": {}
+}
