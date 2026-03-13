@@ -181,8 +181,6 @@ export function createApplication() {
    * Handle errors using registered error handlers
    */
   async function handleError(err, request, response) {
-    console.error('[Error]', err.message || 'Unknown error');
-    
     // Try custom error handlers first
     for (const handler of errorHandlers) {
       try {
@@ -198,7 +196,7 @@ export function createApplication() {
           return;
         }
       } catch (handlerErr) {
-        console.error('[Error Handler Failed]', handlerErr);
+        // Error handler failed, continue to next handler or default
       }
     }
     
@@ -420,16 +418,6 @@ export function createApplication() {
       return new Promise((resolve, reject) => {
         server.listen(port, () => {
           const address = server.address();
-          console.log(`🚀 grokexpress server running on http://localhost:${address.port}`);
-          
-          // Debug info
-          console.log(`\n📊 Middleware Stack:`);
-          console.log(`  Global: ${globalMiddleware.length}`);
-          console.log(`  Path-specific: ${pathMiddleware.length}`);
-          console.log(`  Error handlers: ${errorHandlers.length}`);
-          
-          // Print route table
-          routeTable.print();
           
           if (callback) {
             callback(address);

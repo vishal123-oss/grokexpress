@@ -233,7 +233,7 @@ export class MiddlewarePipeline {
             return;
           }
         } catch (handlerErr) {
-          console.error('Error in error handler:', handlerErr);
+          // Error handler failed, continue to next
         }
       }
     }

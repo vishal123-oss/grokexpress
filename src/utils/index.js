@@ -59,7 +59,6 @@ export function pathMatches(middlewarePath, requestPath) {
  * @param {Response} res - Response object
  */
 export function defaultErrorHandler(err, req, res) {
-  console.error('Error:', err.message);
   const status = err.status || err.statusCode || 500;
   res.status(status).json({
     error: {

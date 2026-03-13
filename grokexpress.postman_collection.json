@@ -1,0 +1,596 @@
+{
+  "info": {
+    "_postman_id": "grokexpress-api-collection",
+    "name": "grokexpress API Collection",
+    "description": "Complete API collection for testing grokexpress framework",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "🏠 Home & Info",
+      "item": [
+        {
+          "name": "Get API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": [""]
+            },
+            "description": "Get API information and available endpoints"
+          }
+        },
+        {
+          "name": "Simple Route",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/simple",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["simple"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔧 Middleware Tests",
+      "item": [
+        {
+          "name": "Global Middleware - CORS Headers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": [""]
+            },
+            "description": "Tests global middleware - CORS and security headers"
+          }
+        },
+        {
+          "name": "Path Middleware - API",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "users"]
+            },
+            "description": "Tests path-specific middleware for /api/*"
+          }
+        },
+        {
+          "name": "Path Middleware - Admin (No Auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/admin/dashboard",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["admin", "dashboard"]
+            },
+            "description": "Should return 401 - tests auth middleware"
+          }
+        },
+        {
+          "name": "Path Middleware - Admin (With Auth)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer token123",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/admin/dashboard",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["admin", "dashboard"]
+            },
+            "description": "Should succeed with auth header"
+          }
+        },
+        {
+          "name": "Inline Middleware - Single",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/with-middleware",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["with-middleware"]
+            }
+          }
+        },
+        {
+          "name": "Inline Middleware - Multiple Chain",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/multi-middleware",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["multi-middleware"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 Users API",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "users", "1"]
+            }
+          }
+        },
+        {
+          "name": "Get User - Invalid ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/abc",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "users", "abc"]
+            },
+            "description": "Should return 400 - validation error"
+          }
+        },
+        {
+          "name": "Create User - Success",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/users",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["users"]
+            }
+          }
+        },
+        {
+          "name": "Create User - Validation Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/users",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["users"]
+            },
+            "description": "Should return 400 - missing email"
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚠️ Error Handling Tests",
+      "item": [
+        {
+          "name": "Sync Error",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/error-sync",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["error-sync"]
+            },
+            "description": "Tests synchronous error catching"
+          }
+        },
+        {
+          "name": "Async Error (Rejected Promise)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/error-async",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["error-async"]
+            },
+            "description": "Tests async error catching"
+          }
+        },
+        {
+          "name": "Error via next()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/error-next",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["error-next"]
+            },
+            "description": "Tests next(err) skipping middleware"
+          }
+        },
+        {
+          "name": "Default Error Response",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/error-default",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["error-default"]
+            },
+            "description": "Tests default error handler"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔄 Response Methods",
+      "item": [
+        {
+          "name": "res.status() + res.json()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "status"]
+            }
+          }
+        },
+        {
+          "name": "res.sendStatus()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/send-status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "send-status"]
+            }
+          }
+        },
+        {
+          "name": "res.send() - String",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/send-string",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "send-string"]
+            }
+          }
+        },
+        {
+          "name": "res.send() - Object (Auto JSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/send-object",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "send-object"]
+            }
+          }
+        },
+        {
+          "name": "res.text()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/text",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "text"]
+            }
+          }
+        },
+        {
+          "name": "res.html()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/html",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "html"]
+            }
+          }
+        },
+        {
+          "name": "res.xml()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/xml",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "xml"]
+            }
+          }
+        },
+        {
+          "name": "res.jsonp()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/jsonp",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "jsonp"]
+            }
+          }
+        },
+        {
+          "name": "res.redirect()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/redirect",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "redirect"]
+            },
+            "description": "Should redirect to /response/redirect-target"
+          }
+        },
+        {
+          "name": "res.cookie()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/cookie",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "cookie"]
+            }
+          }
+        },
+        {
+          "name": "res.format() - JSON",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/response/format",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "format"]
+            }
+          }
+        },
+        {
+          "name": "res.format() - HTML",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/html"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/response/format",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "format"]
+            }
+          }
+        },
+        {
+          "name": "res.notFound()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/not-found",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "not-found"]
+            }
+          }
+        },
+        {
+          "name": "res.error()",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/server-error",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "server-error"]
+            }
+          }
+        },
+        {
+          "name": "res.chain() - Multiple Methods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/response/chain",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["response", "chain"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🌐 Router Tests",
+      "item": [
+        {
+          "name": "Router - Get Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/router-test/products",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["router-test", "products"]
+            }
+          }
+        },
+        {
+          "name": "Router - Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/router-test/products/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["router-test", "products", "1"]
+            }
+          }
+        },
+        {
+          "name": "Router - Invalid Product ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/router-test/products/abc",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["router-test", "products", "abc"]
+            },
+            "description": "Should return 400 - invalid ID"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 Public Files",
+      "item": [
+        {
+          "name": "Public File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/public/file.txt",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["public", "file.txt"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
