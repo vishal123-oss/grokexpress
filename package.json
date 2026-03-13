@@ -2,14 +2,15 @@
   "name": "grokexpress",
   "version": "1.0.0",
   "description": "A lightweight Express-like Node.js framework",
-  "main": "src/index.js",
+  "main": "src/lib/index.js",
   "type": "module",
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
+    "start": "node examples/server.js",
+    "dev": "node --watch examples/server.js",
+    "example": "node examples/server.js",
     "test": "node --test test/**/*.test.js",
     "build": "echo 'Build step - no compilation needed for ES modules'",
     "lint": "echo 'Add linter like ESLint here'"
