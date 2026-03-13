@@ -8,7 +8,9 @@ import { Request } from './request.js';
 import { Response } from './response.js';
 import { MiddlewareStack, MiddlewarePipeline } from './middleware.js';
 import { Router } from './router.js';
-import { matchPath, normalizePath } from './utils.js';
+import { RouteTable } from './route-table.js';
+import { RouteExecutor } from './route-executor.js';
+import { normalizePath } from './utils.js';
 
 /**
  * Create Application - Main factory function
@@ -18,6 +20,7 @@ import { matchPath, normalizePath } from './utils.js';
  */
 export function createApplication() {
   const middlewareStack = new MiddlewareStack();
+  const routeTable = new RouteTable();
   let server = null;
   let customErrorHandler = null;
   
@@ -29,7 +32,41 @@ export function createApplication() {
     const request = new Request(req);
     const response = new Response(res);
     
-    // Create pipeline
+    // Find matching route
+    const { route, params } = routeTable.find(request.method, request.path);
+    
+    // If route found, execute it
+    if (route) {
+      try {
+        await RouteExecutor.execute(route, request, response, params);
+        
+        // If response not sent after route execution, continue to 404
+        if (!response.headersSent && !response.writableEnded) {
+          response.status(404).json({
+            error: 'Not Found',
+            path: request.path,
+            status: 404
+          });
+        }
+        return;
+      } catch (err) {
+        // Handle error
+        if (customErrorHandler) {
+          customErrorHandler(err, request, response, () => {});
+        } else {
+          response.status(err.status || 500).json({
+            error: {
+              message: err.message || 'Internal Server Error',
+              status: err.status || 500,
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+        return;
+      }
+    }
+    
+    // No route matched - try middleware pipeline
     const pipeline = new MiddlewarePipeline(
       middlewareStack.getAll(),
       customErrorHandler ? [{ handler: customErrorHandler }] : []
@@ -46,6 +83,18 @@ export function createApplication() {
         });
       }
     });
+  }
+  
+  /**
+   * Helper to flatten arguments for route registration
+   * Handles: app.get('/path', handler)
+   *          app.get('/path', middleware, handler)
+   *          app.get('/path', mw1, mw2, ..., handler)
+   */
+  function flattenHandlers(args) {
+    // args = [path, handler1, handler2, ...]
+    // Return array of all handlers
+    return args.slice(1);
   }
   
   /**
@@ -106,7 +155,7 @@ export function createApplication() {
         const fullPath = normalizedPrefix + (item.path.startsWith('/') ? item.path : '/' + item.path);
         
         if (item.isRoute) {
-          middlewareStack.route(item.method, fullPath, item.handler);
+          routeTable.register(item.method, fullPath, item.handler);
         } else if (item.isError) {
           customErrorHandler = item.handler;
         } else {
@@ -125,66 +174,69 @@ export function createApplication() {
     },
     
     /**
-     * GET route
+     * GET route - supports multiple middleware
+     * app.get('/path', handler)
+     * app.get('/path', middleware, handler)
+     * app.get('/path', mw1, mw2, ..., handler)
      */
-    get(path, handler) {
-      middlewareStack.route('GET', path, handler);
+    get(path, ...handlers) {
+      routeTable.register('GET', path, ...handlers);
       return app;
     },
     
     /**
-     * POST route
+     * POST route - supports multiple middleware
      */
-    post(path, handler) {
-      middlewareStack.route('POST', path, handler);
+    post(path, ...handlers) {
+      routeTable.register('POST', path, ...handlers);
       return app;
     },
     
     /**
-     * PUT route
+     * PUT route - supports multiple middleware
      */
-    put(path, handler) {
-      middlewareStack.route('PUT', path, handler);
+    put(path, ...handlers) {
+      routeTable.register('PUT', path, ...handlers);
       return app;
     },
     
     /**
-     * PATCH route
+     * PATCH route - supports multiple middleware
      */
-    patch(path, handler) {
-      middlewareStack.route('PATCH', path, handler);
+    patch(path, ...handlers) {
+      routeTable.register('PATCH', path, ...handlers);
       return app;
     },
     
     /**
-     * DELETE route
+     * DELETE route - supports multiple middleware
      */
-    delete(path, handler) {
-      middlewareStack.route('DELETE', path, handler);
+    delete(path, ...handlers) {
+      routeTable.register('DELETE', path, ...handlers);
       return app;
     },
     
     /**
-     * HEAD route
+     * HEAD route - supports multiple middleware
      */
-    head(path, handler) {
-      middlewareStack.route('HEAD', path, handler);
+    head(path, ...handlers) {
+      routeTable.register('HEAD', path, ...handlers);
       return app;
     },
     
     /**
-     * OPTIONS route
+     * OPTIONS route - supports multiple middleware
      */
-    options(path, handler) {
-      middlewareStack.route('OPTIONS', path, handler);
+    options(path, ...handlers) {
+      routeTable.register('OPTIONS', path, ...handlers);
       return app;
     },
     
     /**
-     * All methods route
+     * All methods route - supports multiple middleware
      */
-    all(path, handler) {
-      middlewareStack.route('*', path, handler);
+    all(path, ...handlers) {
+      routeTable.register('*', path, ...handlers);
       return app;
     },
     
@@ -201,6 +253,9 @@ export function createApplication() {
         server.listen(port, () => {
           const address = server.address();
           console.log(`🚀 grokexpress server running on http://localhost:${address.port}`);
+          
+          // Print route table for debugging
+          routeTable.print();
           
           if (callback) {
             callback(address);
@@ -241,6 +296,13 @@ export function createApplication() {
      */
     getStack() {
       return middlewareStack.getAll();
+    },
+    
+    /**
+     * Get route table (for debugging)
+     */
+    getRouteTable() {
+      return routeTable;
     }
   };
   
