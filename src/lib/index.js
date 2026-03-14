@@ -31,5 +31,10 @@ export { Route, createRoute };
 export { RouteTable, createRouteTable };
 export { RouteExecutor, executeRoute };
 
+// Static file serving
+import staticMiddleware from '../middleware/static.js';
+export { staticMiddleware };
+export { staticMiddleware as serveStatic, getMimeType } from '../middleware/static.js';
+
 // Default export for convenience
 export default createApplication;

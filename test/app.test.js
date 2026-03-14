@@ -939,6 +939,155 @@ describe('Body Parser Middleware Tests', () => {
   });
 });
 
+// ============================================
+// STATIC FILE SERVING MIDDLEWARE TESTS
+// ============================================
+
+describe('Static File Serving Middleware Tests', () => {
+  let staticMiddleware, getMimeType;
+  
+  async function loadModules() {
+    const staticModule = await import('../src/middleware/static.js');
+    staticMiddleware = staticModule.default || staticModule.staticMiddleware;
+    getMimeType = staticModule.getMimeType;
+  }
+
+  describe('MIME Type Detection', () => {
+    it('should detect HTML MIME type', async () => {
+      await loadModules();
+      assert.strictEqual(getMimeType('index.html'), 'text/html; charset=utf-8');
+      assert.strictEqual(getMimeType('page.htm'), 'text/html; charset=utf-8');
+    });
+
+    it('should detect CSS MIME type', async () => {
+      await loadModules();
+      assert.strictEqual(getMimeType('style.css'), 'text/css; charset=utf-8');
+    });
+
+    it('should detect JavaScript MIME type', async () => {
+      await loadModules();
+      assert.strictEqual(getMimeType('app.js'), 'application/javascript; charset=utf-8');
+      assert.strictEqual(getMimeType('module.mjs'), 'application/javascript; charset=utf-8');
+    });
+
+    it('should detect JSON MIME type', async () => {
+      await loadModules();
+      assert.strictEqual(getMimeType('data.json'), 'application/json; charset=utf-8');
+    });
+
+    it('should detect image MIME types', async () => {
+      await loadModules();
+      assert.strictEqual(getMimeType('photo.png'), 'image/png');
+      assert.strictEqual(getMimeType('photo.jpg'), 'image/jpeg');
+      assert.strictEqual(getMimeType('photo.jpeg'), 'image/jpeg');
+      assert.strictEqual(getMimeType('icon.ico'), 'image/x-icon');
+      assert.strictEqual(getMimeType('logo.svg'), 'image/svg+xml');
+    });
+
+    it('should detect font MIME types', async () => {
+      await loadModules();
+      assert.strictEqual(getMimeType('font.woff'), 'font/woff');
+      assert.strictEqual(getMimeType('font.woff2'), 'font/woff2');
+      assert.strictEqual(getMimeType('font.ttf'), 'font/ttf');
+    });
+
+    it('should detect PDF MIME type', async () => {
+      await loadModules();
+      assert.strictEqual(getMimeType('doc.pdf'), 'application/pdf');
+    });
+
+    it('should return default MIME for unknown types', async () => {
+      await loadModules();
+      assert.strictEqual(getMimeType('file.unknown'), 'application/octet-stream');
+    });
+  });
+
+  describe('Static Middleware Creation', () => {
+    it('should create middleware function', async () => {
+      await loadModules();
+      const middleware = staticMiddleware('./public');
+      assert.strictEqual(typeof middleware, 'function');
+    });
+
+    it('should accept options', async () => {
+      await loadModules();
+      const middleware = staticMiddleware('./public', {
+        maxAge: '1h',
+        etag: true,
+        lastModified: true,
+        index: 'index.html',
+        fallthrough: true
+      });
+      assert.strictEqual(typeof middleware, 'function');
+    });
+
+    it('should support serveStatic alias', async () => {
+      await loadModules();
+      const staticModule = await import('../src/middleware/static.js');
+      const serveStatic = staticModule.serveStatic;
+      const middleware = serveStatic('./public');
+      assert.strictEqual(typeof middleware, 'function');
+    });
+  });
+
+  describe('Static Middleware with Mock Request', () => {
+    it('should call next() for non-GET/HEAD methods', async () => {
+      await loadModules();
+      const middleware = staticMiddleware('./public');
+      
+      const mockReq = {
+        method: 'POST',
+        path: '/test.txt',
+        get: () => undefined
+      };
+      
+      let nextCalled = false;
+      await middleware(mockReq, {}, () => { nextCalled = true; });
+      
+      assert.strictEqual(nextCalled, true);
+    });
+
+    it('should call next() when file not found (fallthrough)', async () => {
+      await loadModules();
+      const middleware = staticMiddleware('./nonexistent', { fallthrough: true });
+      
+      const mockReq = {
+        method: 'GET',
+        path: '/missing.txt',
+        get: () => undefined
+      };
+      
+      let nextCalled = false;
+      await middleware(mockReq, {}, () => { nextCalled = true; });
+      
+      assert.strictEqual(nextCalled, true);
+    });
+
+    it('should reject path traversal attempts', async () => {
+      await loadModules();
+      const middleware = staticMiddleware('./public', { fallthrough: false });
+      
+      const mockReq = {
+        method: 'GET',
+        path: '/../../../etc/passwd',
+        get: () => undefined
+      };
+      
+      let status = null;
+      const mockRes = {
+        status: (code) => { status = code; return mockRes; },
+        end: () => {},
+        set: () => mockRes
+      };
+      
+      await middleware(mockReq, mockRes, () => {});
+      
+      // Either 403 (security) or 404 (not found after normalization) is acceptable
+      assert.ok(status === 403 || status === 404, `Expected 403 or 404, got ${status}`);
+    });
+  });
+});
+
 // Helper function to make HTTP requests
 function makeRequest(method, path, data = null) {
   return new Promise((resolve, reject) => {

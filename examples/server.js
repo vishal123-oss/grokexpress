@@ -15,8 +15,25 @@
  * 4. Error Handlers (app.use((err, req, res, next) => {}))
  */
 
-import createApplication, { Router } from '../src/lib/index.js';
+import createApplication, { Router, staticMiddleware, getMimeType } from '../src/lib/index.js';
 import bodyParser from '../src/middleware/bodyParser.js';
+
+// Create public directory for static files demo
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+const publicDir = join(process.cwd(), 'public');
+if (!existsSync(publicDir)) {
+  mkdirSync(publicDir, { recursive: true });
+  mkdirSync(join(publicDir, 'css'), { recursive: true });
+  mkdirSync(join(publicDir, 'js'), { recursive: true });
+  mkdirSync(join(publicDir, 'images'), { recursive: true });
+  
+  writeFileSync(join(publicDir, 'index.html'), '<!DOCTYPE html><html><head><title>Static Demo</title></head><body><h1>Static File Serving Demo</h1><p>Files are served with ETags and caching!</p></body></html>');
+  writeFileSync(join(publicDir, 'css/style.css'), 'body { font-family: sans-serif; background: #f5f5f5; } h1 { color: #333; }');
+  writeFileSync(join(publicDir, 'js/app.js'), 'console.log("Hello from grokexpress static serving!");');
+  writeFileSync(join(publicDir, 'robots.txt'), 'User-agent: *\nAllow: /');
+}
 
 // ============================================
 // Create the application
@@ -1134,6 +1151,76 @@ app.post('/body/detect', (req, res) => {
     parsedAsJSON: typeof req.body === 'object' && req.get('content-type')?.includes('json'),
     parsedAsForm: typeof req.body === 'object' && req.get('content-type')?.includes('form'),
     body: req.body
+  });
+});
+
+// ============================================
+// 9. STATIC FILE SERVING
+// Demonstrates static file serving with streaming, MIME types, caching
+// ============================================
+
+// Serve files from ./public at /static
+// Features: ETags, Last-Modified, Cache-Control, 304 responses, streaming
+app.use('/static', staticMiddleware('./public', {
+  maxAge: '1h',           // Cache for 1 hour
+  etag: true,             // Generate ETags
+  lastModified: true,     // Set Last-Modified header
+  index: 'index.html',    // Serve index.html for directories
+  fallthrough: true       // 404 if file not found (let next() handle)
+}));
+
+// Serve assets with long-term caching (for versioned assets)
+app.use('/assets', staticMiddleware('./public', {
+  maxAge: '1y',           // Cache for 1 year
+  immutable: true,        // Mark as immutable
+  etag: true,
+  lastModified: false     // Skip Last-Modified for immutable assets
+}));
+
+/**
+ * Test: Static file MIME type detection
+ * GET /static-mime/:filename
+ */
+app.get('/static-mime/:filename', (req, res) => {
+  const mime = getMimeType(req.params.filename);
+  res.json({
+    message: 'MIME type detection',
+    filename: req.params.filename,
+    mimeType: mime
+  });
+});
+
+/**
+ * Test: Static file info endpoint
+ * GET /static-info
+ */
+app.get('/static-info', (req, res) => {
+  res.json({
+    message: 'Static file serving enabled',
+    endpoints: [
+      { path: '/static/*', description: 'Serve files from ./public with 1h cache' },
+      { path: '/assets/*', description: 'Serve files with 1y immutable cache' },
+      { path: '/static-mime/:file', description: 'Get MIME type for filename' }
+    ],
+    features: [
+      'File streaming for large files',
+      'Automatic MIME type detection (30+ types)',
+      'ETag generation (MD5 of size+mtime)',
+      'Last-Modified headers',
+      'Cache-Control with max-age',
+      'If-None-Match -> 304 Not Modified',
+      'If-Modified-Since -> 304 Not Modified',
+      'HEAD request support',
+      'Path traversal protection',
+      'Dotfile protection',
+      'Directory -> index.html fallback'
+    ],
+    exampleFiles: [
+      '/static/index.html',
+      '/static/css/style.css',
+      '/static/js/app.js',
+      '/static/robots.txt'
+    ]
   });
 });
 
