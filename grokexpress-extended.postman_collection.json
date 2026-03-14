@@ -1,0 +1,676 @@
+{
+  "info": {
+    "_postman_id": "grokexpress-extended-v2",
+    "name": "grokexpress - Extended Features",
+    "description": "Postman collection for testing all recently added features:\n- Parameterized Routes\n- Query String Parsing (arrays, nested, repeated params)\n- Body Parsing (JSON + URL-encoded)\n- Static File Serving\n- CORS\n- Rate Limiting\n- Nested Routers",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": null,
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Parameterized Routes",
+      "description": "Test dynamic route parameters extraction",
+      "item": [
+        {
+          "name": "GET /users/:id - Get user by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/42",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "42"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /users/:userId/posts/:postId - Multiple params",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/123/posts/456",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "123", "posts", "456"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /users/:id - Update with param",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"name\": \"Updated Name\"}"},
+            "url": {
+              "raw": "{{baseUrl}}/users/42",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "42"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /users/:id - Delete with param",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/42",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "42"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Query String Parsing",
+      "description": "Test enhanced query string features",
+      "item": [
+        {
+          "name": "Simple params - /query/simple?name=John&age=30",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/query/simple?name=John&age=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["query", "simple"],
+              "query": [
+                {"key": "name", "value": "John"},
+                {"key": "age", "value": "30"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Repeated params - /query/repeated?id=1&id=2&id=3",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/query/repeated?id=1&id=2&id=3",
+              "host": ["{{baseUrl}}"],
+              "path": ["query", "repeated"],
+              "query": [
+                {"key": "id", "value": "1"},
+                {"key": "id", "value": "2"},
+                {"key": "id", "value": "3"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Array notation - /query/array?tags[]=js&tags[]=node",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/query/array?tags[]=javascript&tags[]=nodejs&tags[]=express",
+              "host": ["{{baseUrl}}"],
+              "path": ["query", "array"],
+              "query": [
+                {"key": "tags[]", "value": "javascript"},
+                {"key": "tags[]", "value": "nodejs"},
+                {"key": "tags[]", "value": "express"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Nested objects - /query/nested?user[name]=John",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/query/nested?user[name]=John&user[email]=john@example.com&user[age]=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["query", "nested"],
+              "query": [
+                {"key": "user[name]", "value": "John"},
+                {"key": "user[email]", "value": "john@example.com"},
+                {"key": "user[age]", "value": "25"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deep nesting - /query/deep?filter[status]=active",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/query/deep?filter[status]=active&filter[settings][theme]=dark",
+              "host": ["{{baseUrl}}"],
+              "path": ["query", "deep"],
+              "query": [
+                {"key": "filter[status]", "value": "active"},
+                {"key": "filter[settings][theme]", "value": "dark"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Indexed arrays - /query/indexed?items[0]=first",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/query/indexed?items[0]=first&items[1]=second&items[2]=third",
+              "host": ["{{baseUrl}}"],
+              "path": ["query", "indexed"],
+              "query": [
+                {"key": "items[0]", "value": "first"},
+                {"key": "items[1]", "value": "second"},
+                {"key": "items[2]", "value": "third"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "URL encoded values - /query/encoded",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/query/encoded?name=John%20Doe&email=john%40example.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["query", "encoded"],
+              "query": [
+                {"key": "name", "value": "John Doe"},
+                {"key": "email", "value": "john@example.com"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Combined - route params + query",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/query/combined/electronics?sort=asc&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["query", "combined", "electronics"],
+              "query": [
+                {"key": "sort", "value": "asc"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Body Parsing (JSON)",
+      "description": "Test JSON body parsing",
+      "item": [
+        {
+          "name": "POST /body/json - Simple JSON",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John\",\n  \"age\": 30,\n  \"tags\": [\"admin\", \"user\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/body/json",
+              "host": ["{{baseUrl}}"],
+              "path": ["body", "json"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /body/json-nested - Nested JSON",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user\": {\n    \"name\": \"Jane\",\n    \"profile\": {\n      \"email\": \"jane@example.com\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/body/json-nested",
+              "host": ["{{baseUrl}}"],
+              "path": ["body", "json-nested"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /body/json/:id - JSON with params",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Updated User\"}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/body/json/123",
+              "host": ["{{baseUrl}}"],
+              "path": ["body", "json", "123"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Body Parsing (URL-encoded)",
+      "description": "Test form data parsing",
+      "item": [
+        {
+          "name": "POST /body/form - Simple form",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/x-www-form-urlencoded"}],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {"key": "name", "value": "John Doe"},
+                {"key": "email", "value": "john@example.com"},
+                {"key": "age", "value": "30"}
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/body/form",
+              "host": ["{{baseUrl}}"],
+              "path": ["body", "form"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /body/form-array - Form with arrays",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/x-www-form-urlencoded"}],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {"key": "tags", "value": "javascript"},
+                {"key": "tags", "value": "nodejs"},
+                {"key": "tags", "value": "express"}
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/body/form-array",
+              "host": ["{{baseUrl}}"],
+              "path": ["body", "form-array"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /body/form/:id - Form with params",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/x-www-form-urlencoded"}],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {"key": "status", "value": "active"},
+                {"key": "priority", "value": "high"}
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/body/form/42",
+              "host": ["{{baseUrl}}"],
+              "path": ["body", "form", "42"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Static File Serving",
+      "description": "Test static file serving with caching",
+      "item": [
+        {
+          "name": "GET /static/index.html",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/static/index.html",
+              "host": ["{{baseUrl}}"],
+              "path": ["static", "index.html"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /static/css/style.css",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/static/css/style.css",
+              "host": ["{{baseUrl}}"],
+              "path": ["static", "css", "style.css"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /assets/js/app.js (long cache)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assets/js/app.js",
+              "host": ["{{baseUrl}}"],
+              "path": ["assets", "js", "app.js"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /static-mime/test.pdf",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/static-mime/document.pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["static-mime", "document.pdf"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /static-info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/static-info",
+              "host": ["{{baseUrl}}"],
+              "path": ["static-info"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. CORS Testing",
+      "description": "Test Cross-Origin Resource Sharing",
+      "item": [
+        {
+          "name": "GET /cors-test - Basic CORS",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Origin", "value": "https://example.com"}],
+            "url": {
+              "raw": "{{baseUrl}}/cors-test",
+              "host": ["{{baseUrl}}"],
+              "path": ["cors-test"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "OPTIONS /cors-test - Preflight",
+          "request": {
+            "method": "OPTIONS",
+            "header": [
+              {"key": "Origin", "value": "https://example.com"},
+              {"key": "Access-Control-Request-Method", "value": "POST"},
+              {"key": "Access-Control-Request-Headers", "value": "Content-Type, Authorization"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cors-test",
+              "host": ["{{baseUrl}}"],
+              "path": ["cors-test"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /body/json with Origin header",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Origin", "value": "https://app.example.com"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\"test\": true}"},
+            "url": {
+              "raw": "{{baseUrl}}/body/json",
+              "host": ["{{baseUrl}}"],
+              "path": ["body", "json"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Rate Limiting",
+      "description": "Test DOS protection and rate limiting",
+      "item": [
+        {
+          "name": "GET /rate-limit-info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/rate-limit-info",
+              "host": ["{{baseUrl}}"],
+              "path": ["rate-limit-info"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /strict-rate-test (5 req/min)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/strict-rate-test",
+              "host": ["{{baseUrl}}"],
+              "path": ["strict-rate-test"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /sliding-rate-test (10 req/30s)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sliding-rate-test",
+              "host": ["{{baseUrl}}"],
+              "path": ["sliding-rate-test"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /bucket-rate-test (burst: 20)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bucket-rate-test",
+              "host": ["{{baseUrl}}"],
+              "path": ["bucket-rate-test"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Rate limit stress test (run 5x)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/strict-rate-test",
+              "host": ["{{baseUrl}}"],
+              "path": ["strict-rate-test"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "8. Nested Routers",
+      "description": "Test router nesting with path prefixing",
+      "item": [
+        {
+          "name": "GET /v1/users - List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/users/:id - Get user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/42",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "42"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/users/:id/profile - Nested profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/42/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "42", "profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/users/:id/orders - Nested orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/42/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "42", "orders"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/products - List products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "products"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /v1/products/:id - Get product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/products/10",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "products", "10"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "9. Combined Features",
+      "description": "Test features working together",
+      "item": [
+        {
+          "name": "POST /v1/users with CORS + body + rate limit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Origin", "value": "https://example.com"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New User\",\n  \"email\": \"new@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /body/form with CORS origin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Origin", "value": "https://app.example.com"},
+              {"key": "Content-Type", "value": "application/x-www-form-urlencoded"}
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {"key": "name", "value": "Cross Origin User"},
+                {"key": "email", "value": "cross@example.com"}
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/body/form",
+              "host": ["{{baseUrl}}"],
+              "path": ["body", "form"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
