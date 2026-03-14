@@ -17,6 +17,8 @@
 
 import createApplication, { Router, staticMiddleware, getMimeType } from '../src/lib/index.js';
 import bodyParser from '../src/middleware/bodyParser.js';
+import cors from '../src/middleware/cors.js';
+import rateLimiter, { slidingWindowLimiter, tokenBucketLimiter } from '../src/middleware/rateLimiter.js';
 
 // Create public directory for static files demo
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
@@ -48,6 +50,38 @@ function logExecution(type, name, path) {
   executionLog.push(entry);
   console.log(`[${type}] ${name} - ${path}`);
 }
+
+// ============================================
+// 0. CORS & SECURITY MIDDLEWARE
+// ============================================
+
+/**
+ * CORS Middleware
+ * Enables cross-origin requests with full configuration
+ */
+app.use(cors({
+  origin: '*', // In production, use specific origins
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-API-Key'],
+  exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+  credentials: true,
+  maxAge: 86400 // 24 hours preflight cache
+}));
+
+/**
+ * Rate Limiter - Global (DOS Protection)
+ * Limits requests per IP address
+ */
+app.use(rateLimiter({
+  windowMs: 60 * 1000,  // 1 minute window
+  max: 100,             // 100 requests per minute per IP
+  message: 'Too many requests from this IP, please try again later.',
+  headers: true,        // Send X-RateLimit headers
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/health' || req.path === '/';
+  }
+}));
 
 // ============================================
 // 1. GLOBAL MIDDLEWARE
@@ -1237,6 +1271,98 @@ app.get('/static-info', (req, res) => {
 });
 
 // ============================================
+// 10. CORS & RATE LIMITER TESTS
+// ============================================
+
+/**
+ * Test: CORS headers check
+ * GET /cors-test
+ */
+app.get('/cors-test', (req, res) => {
+  res.json({
+    message: 'CORS is enabled',
+    corsHeaders: {
+      'Access-Control-Allow-Origin': res.get('Access-Control-Allow-Origin') || 'not set',
+      'Access-Control-Allow-Credentials': res.get('Access-Control-Allow-Credentials') || 'not set'
+    },
+    requestOrigin: req.get('origin') || 'no origin header',
+    note: 'Try this from a browser or with curl -H "Origin: https://example.com"'
+  });
+});
+
+/**
+ * Test: Rate limiter info
+ * GET /rate-limit-info
+ */
+app.get('/rate-limit-info', (req, res) => {
+  res.json({
+    message: 'Rate limiting is enabled',
+    globalLimits: {
+      window: '1 minute',
+      maxRequests: 100,
+      headers: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset']
+    },
+    currentRequest: {
+      limit: res.get('X-RateLimit-Limit'),
+      remaining: res.get('X-RateLimit-Remaining'),
+      reset: res.get('X-RateLimit-Reset')
+    },
+    note: 'Exceed 100 requests/minute to get 429 error'
+  });
+});
+
+/**
+ * Test: Strict rate limiter (for sensitive endpoints)
+ * GET /strict-rate-test
+ * Only 5 requests per minute allowed
+ */
+app.get('/strict-rate-test', rateLimiter({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: 'Strict rate limit exceeded. Only 5 requests per minute allowed.',
+  keyGenerator: (req) => `strict:${req.ip}`
+}), (req, res) => {
+  res.json({
+    message: 'Strict rate limiter test passed',
+    limit: 5,
+    remaining: res.get('X-RateLimit-Remaining'),
+    note: 'Only 5 requests per minute allowed on this endpoint'
+  });
+});
+
+/**
+ * Test: Sliding window rate limiter
+ * GET /sliding-rate-test
+ */
+app.get('/sliding-rate-test', slidingWindowLimiter({
+  windowMs: 30 * 1000,
+  max: 10
+}), (req, res) => {
+  res.json({
+    message: 'Sliding window rate limiter',
+    limit: 10,
+    window: '30 seconds',
+    remaining: res.get('X-RateLimit-Remaining')
+  });
+});
+
+/**
+ * Test: Token bucket rate limiter (allows bursting)
+ * GET /bucket-rate-test
+ */
+app.get('/bucket-rate-test', tokenBucketLimiter({
+  bucketSize: 20,
+  refillRate: 2 // 2 tokens per second
+}), (req, res) => {
+  res.json({
+    message: 'Token bucket rate limiter (allows bursting)',
+    bucketSize: 20,
+    refillRate: '2 tokens/second',
+    remaining: res.get('X-RateLimit-Remaining')
+  });
+});
+
+// ============================================
 // 4. ERROR HANDLER MIDDLEWARE
 // Must be registered AFTER all other middleware and routes
 // Signature: (err, req, res, next) => {}
@@ -1359,6 +1485,19 @@ app.listen(PORT, (address) => {
   console.log(`# Empty body and error handling`);
   console.log(`curl -X POST http://localhost:${address.port}/body/empty`);
   console.log(`curl -X POST http://localhost:${address.port}/body/invalid-json -H "Content-Type: application/json" -d '{invalid}'`);
+  
+  console.log('\n# 10. CORS & Rate Limiter Tests');
+  console.log(`# CORS test with origin header`);
+  console.log(`curl -H "Origin: https://example.com" http://localhost:${address.port}/cors-test`);
+  console.log(`curl -X OPTIONS -H "Origin: https://example.com" http://localhost:${address.port}/cors-test`);
+  console.log(`# Rate limiter info`);
+  console.log(`curl http://localhost:${address.port}/rate-limit-info`);
+  console.log(`# Strict rate limiter (5 req/min)`);
+  console.log(`curl http://localhost:${address.port}/strict-rate-test`);
+  console.log(`# Sliding window rate limiter`);
+  console.log(`curl http://localhost:${address.port}/sliding-rate-test`);
+  console.log(`# Token bucket rate limiter (bursting allowed)`);
+  console.log(`curl http://localhost:${address.port}/bucket-rate-test`);
   
   console.log('');
 });

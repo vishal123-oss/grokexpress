@@ -1088,6 +1088,224 @@ describe('Static File Serving Middleware Tests', () => {
   });
 });
 
+// ============================================
+// CORS MIDDLEWARE TESTS
+// ============================================
+
+describe('CORS Middleware Tests', () => {
+  let cors;
+  
+  async function loadModules() {
+    const corsModule = await import('../src/middleware/cors.js');
+    cors = corsModule.default || corsModule.cors;
+  }
+
+  describe('CORS Middleware Creation', () => {
+    it('should create middleware function', async () => {
+      await loadModules();
+      const middleware = cors();
+      assert.strictEqual(typeof middleware, 'function');
+    });
+
+    it('should accept options', async () => {
+      await loadModules();
+      const middleware = cors({
+        origin: 'https://example.com',
+        methods: ['GET', 'POST'],
+        credentials: true
+      });
+      assert.strictEqual(typeof middleware, 'function');
+    });
+  });
+
+  describe('CORS Headers', () => {
+    it('should set Access-Control-Allow-Origin for wildcard', async () => {
+      await loadModules();
+      const middleware = cors({ origin: '*' });
+      
+      const headers = {};
+      const mockReq = {
+        method: 'GET',
+        path: '/test',
+        get: (name) => 'https://example.com'
+      };
+      const mockRes = {
+        set: (name, value) => { headers[name] = value; return mockRes; },
+        status: () => mockRes,
+        end: () => {}
+      };
+      
+      let nextCalled = false;
+      middleware(mockReq, mockRes, () => { nextCalled = true; });
+      
+      assert.strictEqual(headers['Access-Control-Allow-Origin'], '*');
+      assert.strictEqual(nextCalled, true);
+    });
+
+    it('should handle OPTIONS preflight request', async () => {
+      await loadModules();
+      const middleware = cors({ origin: '*' });
+      
+      const headers = {};
+      let status = null;
+      const mockReq = {
+        method: 'OPTIONS',
+        path: '/test',
+        get: () => 'https://example.com'
+      };
+      const mockRes = {
+        set: (name, value) => { headers[name] = value; return mockRes; },
+        status: (code) => { status = code; return mockRes; },
+        end: () => {}
+      };
+      
+      middleware(mockReq, mockRes, () => {});
+      
+      assert.strictEqual(status, 204);
+      assert.ok(headers['Access-Control-Allow-Origin']);
+    });
+
+    it('should set credentials header when enabled', async () => {
+      await loadModules();
+      const middleware = cors({ origin: '*', credentials: true });
+      
+      const headers = {};
+      const mockReq = {
+        method: 'GET',
+        path: '/test',
+        get: () => 'https://example.com'
+      };
+      const mockRes = {
+        set: (name, value) => { headers[name] = value; return mockRes; },
+        status: () => mockRes,
+        end: () => {}
+      };
+      
+      middleware(mockReq, mockRes, () => {});
+      
+      assert.strictEqual(headers['Access-Control-Allow-Credentials'], 'true');
+    });
+  });
+});
+
+// ============================================
+// RATE LIMITER MIDDLEWARE TESTS
+// ============================================
+
+describe('Rate Limiter Middleware Tests', () => {
+  let rateLimiter;
+  
+  async function loadModules() {
+    const rlModule = await import('../src/middleware/rateLimiter.js');
+    rateLimiter = rlModule.default || rlModule.rateLimiter;
+  }
+
+  describe('Rate Limiter Creation', () => {
+    it('should create middleware function', async () => {
+      await loadModules();
+      const middleware = rateLimiter();
+      assert.strictEqual(typeof middleware, 'function');
+    });
+
+    it('should accept options', async () => {
+      await loadModules();
+      const middleware = rateLimiter({
+        windowMs: 60000,
+        max: 100,
+        message: 'Rate limit exceeded'
+      });
+      assert.strictEqual(typeof middleware, 'function');
+    });
+  });
+
+  describe('Rate Limiting Behavior', () => {
+    it('should set rate limit headers', async () => {
+      await loadModules();
+      const middleware = rateLimiter({ windowMs: 60000, max: 10 });
+      
+      const headers = {};
+      const mockReq = {
+        method: 'GET',
+        path: '/test',
+        ip: '127.0.0.1',
+        get: () => undefined
+      };
+      const mockRes = {
+        set: (name, value) => { headers[name] = value; return mockRes; },
+        status: () => mockRes,
+        end: () => {}
+      };
+      
+      let nextCalled = false;
+      middleware(mockReq, mockRes, () => { nextCalled = true; });
+      
+      assert.strictEqual(headers['X-RateLimit-Limit'], '10');
+      assert.strictEqual(headers['X-RateLimit-Remaining'], '9');
+      assert.strictEqual(nextCalled, true);
+    });
+
+    it('should skip rate limiting when skip returns true', async () => {
+      await loadModules();
+      const middleware = rateLimiter({
+        windowMs: 60000,
+        max: 1,
+        skip: (req) => req.path === '/health'
+      });
+      
+      const headers = {};
+      const mockReq = {
+        method: 'GET',
+        path: '/health',
+        ip: '127.0.0.1',
+        get: () => undefined
+      };
+      const mockRes = {
+        set: (name, value) => { headers[name] = value; return mockRes; },
+        status: () => mockRes,
+        end: () => {}
+      };
+      
+      let nextCalled = false;
+      middleware(mockReq, mockRes, () => { nextCalled = true; });
+      
+      assert.strictEqual(headers['X-RateLimit-Limit'], undefined);
+      assert.strictEqual(nextCalled, true);
+    });
+
+    it('should block requests when limit exceeded', async () => {
+      await loadModules();
+      const middleware = rateLimiter({ windowMs: 60000, max: 1 });
+      
+      const mockReq = {
+        method: 'GET',
+        path: '/test',
+        ip: '127.0.0.1',
+        get: () => undefined
+      };
+      
+      // First request should pass
+      let nextCalled = false;
+      middleware(mockReq, { set: () => {}, status: () => {}, end: () => {} }, () => { nextCalled = true; });
+      assert.strictEqual(nextCalled, true);
+      
+      // Second request should be blocked
+      let status = null;
+      const mockRes = {
+        set: () => mockRes,
+        status: (code) => { status = code; return mockRes; },
+        json: () => {},
+        end: () => {}
+      };
+      
+      nextCalled = false;
+      middleware(mockReq, mockRes, () => { nextCalled = true; });
+      
+      assert.strictEqual(status, 429);
+      assert.strictEqual(nextCalled, false);
+    });
+  });
+});
+
 // Helper function to make HTTP requests
 function makeRequest(method, path, data = null) {
   return new Promise((resolve, reject) => {
