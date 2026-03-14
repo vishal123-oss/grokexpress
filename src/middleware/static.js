@@ -142,34 +142,128 @@ function shouldReturnNotModified(req, etag, lastModified) {
 }
 
 /**
+ * Build Cache-Control header value
+ * @param {Object} opts - Options
+ * @param {number} maxAge - Max age in seconds
+ * @param {number} sMaxAge - Shared max-age (CDN)
+ * @returns {string} Cache-Control value
+ */
+function buildCacheControl(opts, maxAge, sMaxAge) {
+  const parts = [];
+  const cc = opts.cacheControl || {};
+  
+  // Cache type directive
+  if (cc.type) {
+    parts.push(cc.type);
+  } else if (opts.immutable) {
+    parts.push('public');
+  } else if (maxAge > 0) {
+    parts.push('public');
+  }
+  
+  // Max-age
+  if (maxAge > 0) {
+    parts.push(`max-age=${maxAge}`);
+  }
+  
+  // Shared max-age (for CDNs/proxies)
+  if (sMaxAge !== null && sMaxAge > 0) {
+    parts.push(`s-maxage=${sMaxAge}`);
+  }
+  
+  // Immutable
+  if (opts.immutable) {
+    parts.push('immutable');
+  }
+  
+  // Stale-while-revalidate
+  if (cc.staleWhileRevalidate) {
+    const swr = typeof cc.staleWhileRevalidate === 'number' ? cc.staleWhileRevalidate : 86400;
+    parts.push(`stale-while-revalidate=${swr}`);
+  }
+  
+  // Stale-if-error
+  if (cc.staleIfError) {
+    const sie = typeof cc.staleIfError === 'number' ? cc.staleIfError : 86400;
+    parts.push(`stale-if-error=${sie}`);
+  }
+  
+  // Must-revalidate
+  if (cc.mustRevalidate) {
+    parts.push('must-revalidate');
+  }
+  
+  // No-transform
+  if (cc.noTransform) {
+    parts.push('no-transform');
+  }
+  
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
+/**
  * Send file response with streaming
  * @param {Response} res - Response object
  * @param {string} filepath - Full path to file
  * @param {Object} options - Response options
  */
 function sendFile(res, filepath, options = {}) {
-  const { stats, mimeType, etag, lastModified, maxAge, immutable } = options;
+  const { 
+    stats, mimeType, etag, lastModified, maxAge, immutable, 
+    opts, sMaxAge, acceptRanges, setExpires 
+  } = options;
   
-  // Set headers
+  // Set core headers
   res.set('Content-Type', mimeType);
   res.set('Content-Length', stats.size);
-  res.set('Last-Modified', lastModified.toUTCString());
-  res.set('ETag', etag);
-  
-  // Set Cache-Control
-  let cacheControl = [];
-  if (maxAge > 0) {
-    cacheControl.push(`max-age=${maxAge}`);
-  }
-  if (immutable) {
-    cacheControl.push('immutable');
-  }
-  if (cacheControl.length > 0) {
-    res.set('Cache-Control', cacheControl.join(', '));
-  }
-  
-  // Set X-Content-Type-Options for security
   res.set('X-Content-Type-Options', 'nosniff');
+  
+  // Accept-Ranges for resumable downloads
+  if (acceptRanges !== false) {
+    res.set('Accept-Ranges', 'bytes');
+  }
+  
+  // Last-Modified
+  if (lastModified) {
+    res.set('Last-Modified', lastModified.toUTCString());
+  }
+  
+  // ETag
+  if (etag) {
+    res.set('ETag', etag);
+  }
+  
+  // Build and set Cache-Control
+  const cacheControlValue = buildCacheControl(opts, maxAge, sMaxAge);
+  if (cacheControlValue) {
+    res.set('Cache-Control', cacheControlValue);
+  }
+  
+  // Expires header (HTTP/1.0 compatibility)
+  if (setExpires !== false && maxAge > 0) {
+    const expiresDate = new Date(Date.now() + maxAge * 1000);
+    res.set('Expires', expiresDate.toUTCString());
+  }
+  
+  // Pragma for HTTP/1.0
+  if (opts.cacheControl?.type === 'no-cache' || opts.cacheControl?.type === 'no-store') {
+    res.set('Pragma', 'no-cache');
+  }
+  
+  // Vary header for proper caching with content negotiation
+  if (opts.vary) {
+    const varyValue = Array.isArray(opts.vary) ? opts.vary.join(', ') : opts.vary;
+    res.set('Vary', varyValue);
+  }
+  
+  // Call custom setHeaders
+  if (opts.setHeaders) {
+    try {
+      opts.setHeaders(res, filepath, stats);
+    } catch (err) {
+      // Ignore errors
+    }
+  }
   
   // Stream the file
   const stream = createReadStream(filepath);
@@ -197,17 +291,29 @@ function sendFile(res, filepath, options = {}) {
  * @param {boolean} options.etag - Generate ETags (default: true)
  * @param {boolean} options.lastModified - Set Last-Modified (default: true)
  * @param {string} options.setHeaders - Custom header function (req, path, stat) => {}
+ * @param {string} options.prefix - Mount prefix to strip from path (auto-detected if not set)
+ * @param {Object} options.cacheControl - Advanced cache control options
+ * @param {string} options.cacheControl.type - 'public' | 'private' | 'no-cache' | 'no-store' | 'must-revalidate'
+ * @param {string} options.cacheControl.sMaxAge - Shared proxy cache max-age (CDN)
+ * @param {boolean} options.cacheControl.staleWhileRevalidate - Add stale-while-revalidate
+ * @param {boolean} options.cacheControl.staleIfError - Add stale-if-error
+ * @param {boolean} options.acceptRanges - Set Accept-Ranges header (default: true)
+ * @param {boolean} options.setExpires - Set Expires header based on maxAge (default: true)
  * @returns {Function} Middleware function
  * 
  * @example
  * // Basic usage
  * app.use('/static', staticMiddleware('./public'));
  * 
- * // With options
+ * // With caching options
  * app.use('/assets', staticMiddleware('./assets', {
  *   maxAge: '1y',
  *   immutable: true,
- *   index: 'index.html'
+ *   cacheControl: {
+ *     type: 'public',
+ *     sMaxAge: '1y',           // CDN cache
+ *     staleWhileRevalidate: true
+ *   }
  * }));
  */
 export function staticMiddleware(root, options = {}) {
@@ -219,10 +325,15 @@ export function staticMiddleware(root, options = {}) {
     fallthrough: options.fallthrough !== false,
     etag: options.etag !== false,
     lastModified: options.lastModified !== false,
-    setHeaders: options.setHeaders || null
+    setHeaders: options.setHeaders || null,
+    prefix: options.prefix || null,
+    cacheControl: options.cacheControl || {},
+    acceptRanges: options.acceptRanges !== false,
+    setExpires: options.setExpires !== false
   };
   
   const maxAgeSeconds = parseMaxAge(opts.maxAge);
+  const sMaxAge = opts.cacheControl.sMaxAge ? parseMaxAge(opts.cacheControl.sMaxAge) : null;
   const rootPath = resolve(root);
   
   return (req, res, next) => {
@@ -236,8 +347,20 @@ export function staticMiddleware(root, options = {}) {
     }
     
     // Get the requested path relative to the mount point
-    // req.path is the URL path, need to strip the middleware prefix
     let requestPath = req.path || '/';
+    
+    // Strip mount prefix if provided or auto-detect from req.baseUrl
+    if (opts.prefix) {
+      const prefix = opts.prefix.startsWith('/') ? opts.prefix : '/' + opts.prefix;
+      if (requestPath.startsWith(prefix)) {
+        requestPath = requestPath.slice(prefix.length) || '/';
+      }
+    } else if (req.baseUrl) {
+      // Auto-strip baseUrl if set by router
+      if (requestPath.startsWith(req.baseUrl)) {
+        requestPath = requestPath.slice(req.baseUrl.length) || '/';
+      }
+    }
     
     // Remove query string
     requestPath = requestPath.split('?')[0];
@@ -327,14 +450,27 @@ export function staticMiddleware(root, options = {}) {
     if (req.method === 'HEAD') {
       res.set('Content-Type', mimeType);
       res.set('Content-Length', stats.size);
+      res.set('X-Content-Type-Options', 'nosniff');
+      
+      if (acceptRanges !== false) {
+        res.set('Accept-Ranges', 'bytes');
+      }
       if (etag) res.set('ETag', etag);
       if (lastModified) res.set('Last-Modified', lastModified.toUTCString());
-      if (maxAgeSeconds > 0) {
-        let cc = `max-age=${maxAgeSeconds}`;
-        if (opts.immutable) cc += ', immutable';
-        res.set('Cache-Control', cc);
+      
+      // Build cache control for HEAD
+      const ccValue = buildCacheControl(opts, maxAgeSeconds, sMaxAge);
+      if (ccValue) res.set('Cache-Control', ccValue);
+      
+      if (opts.setExpires !== false && maxAgeSeconds > 0) {
+        res.set('Expires', new Date(Date.now() + maxAgeSeconds * 1000).toUTCString());
       }
-      res.set('X-Content-Type-Options', 'nosniff');
+      
+      if (opts.vary) {
+        const varyValue = Array.isArray(opts.vary) ? opts.vary.join(', ') : opts.vary;
+        res.set('Vary', varyValue);
+      }
+      
       res.status(200).end();
       return;
     }
@@ -346,7 +482,11 @@ export function staticMiddleware(root, options = {}) {
       etag,
       lastModified,
       maxAge: maxAgeSeconds,
-      immutable: opts.immutable
+      immutable: opts.immutable,
+      opts,
+      sMaxAge,
+      acceptRanges: opts.acceptRanges,
+      setExpires: opts.setExpires
     });
   };
 }

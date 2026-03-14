@@ -1166,15 +1166,27 @@ app.use('/static', staticMiddleware('./public', {
   etag: true,             // Generate ETags
   lastModified: true,     // Set Last-Modified header
   index: 'index.html',    // Serve index.html for directories
-  fallthrough: true       // 404 if file not found (let next() handle)
+  fallthrough: true,      // 404 if file not found (let next() handle)
+  prefix: '/static',      // Strip /static prefix from paths
+  cacheControl: {
+    type: 'public',
+    staleWhileRevalidate: true  // Allow stale content while revalidating
+  }
 }));
 
 // Serve assets with long-term caching (for versioned assets)
 app.use('/assets', staticMiddleware('./public', {
   maxAge: '1y',           // Cache for 1 year
-  immutable: true,        // Mark as immutable
+  immutable: true,        // Mark as immutable (never revalidate)
   etag: true,
-  lastModified: false     // Skip Last-Modified for immutable assets
+  lastModified: false,    // Skip Last-Modified for immutable assets
+  prefix: '/assets',      // Strip /assets prefix from paths
+  cacheControl: {
+    type: 'public',
+    sMaxAge: '1y',        // CDN cache for 1 year
+    noTransform: true     // Don't transform content
+  },
+  vary: 'Accept-Encoding' // Vary for proper caching with gzip
 }));
 
 /**
