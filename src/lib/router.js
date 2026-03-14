@@ -20,6 +20,25 @@ export class Router {
    * @param {Function} middleware - Middleware function (optional)
    */
   use(path, middleware) {
+    // Router mounting without path: router.use(subRouter)
+    if (path instanceof Router) {
+      middleware = path;
+      path = '/';
+    }
+    
+    // Router mounting with path: router.use('/path', subRouter)
+    if (typeof path === 'string' && middleware instanceof Router) {
+      this.stack.push({
+        path,
+        router: middleware,
+        isRoute: false,
+        isRouter: true,
+        isError: false
+      });
+      return this;
+    }
+    
+    // Middleware without path
     if (typeof path === 'function') {
       middleware = path;
       path = '/';
@@ -32,6 +51,7 @@ export class Router {
       path,
       handler: middleware,
       isRoute: false,
+      isRouter: false,
       isError
     });
     
@@ -165,7 +185,49 @@ export class Router {
    */
   route(path) {
     const subRouter = new Router();
-    subRouter._prefix = path;
+    subRouter._prefix = '/';
+    
+    // Mount sub-router at the specified path
+    this.stack.push({
+      path,
+      router: subRouter,
+      isRoute: false,
+      isRouter: true,
+      isError: false
+    });
+    
     return subRouter;
+  }
+  
+  /**
+   * Get router stack (for mounting)
+   * @returns {Array}
+   */
+  getStack() {
+    return this.stack;
+  }
+  
+  /**
+   * Get router prefix (if set)
+   * @returns {string}
+   */
+  getPrefix() {
+    return this._prefix || '/';
+  }
+  
+  /**
+   * Set router prefix
+   * @param {string} prefix - Path prefix
+   */
+  setPrefix(prefix) {
+    this._prefix = prefix;
+  }
+  
+  /**
+   * Create a router instance
+   * @returns {Router}
+   */
+  static create() {
+    return new Router();
   }
 }

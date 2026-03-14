@@ -308,9 +308,12 @@ export function createApplication() {
      */
     _mountRouter(router, prefix) {
       const normalizedPrefix = normalizePath(prefix);
+      const routerPrefix = normalizePath(router.getPrefix ? router.getPrefix() : '/');
+      const basePath = normalizePath(normalizedPrefix + (routerPrefix === '/' ? '' : routerPrefix));
       
-      router.stack.forEach(item => {
-        const fullPath = normalizedPrefix + (item.path.startsWith('/') ? item.path : '/' + item.path);
+      (router.getStack ? router.getStack() : router.stack).forEach(item => {
+        const itemPath = item.path || '/';
+        const fullPath = normalizePath(basePath + (itemPath.startsWith('/') ? itemPath : '/' + itemPath));
         
         if (item.isRoute) {
           // Register route with its inline middleware (spread handlers array)
@@ -318,6 +321,9 @@ export function createApplication() {
         } else if (item.isError) {
           // Router error handler
           errorHandlers.push(item.handler);
+        } else if (item.isRouter && item.router) {
+          // Nested router - recursively mount with combined path
+          this._mountRouter(item.router, fullPath);
         } else {
           // Router middleware becomes path-specific middleware
           pathMiddleware.push({

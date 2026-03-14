@@ -534,6 +534,103 @@ describe('Query String Parsing Tests', () => {
       }
     });
 
+    it('should support nested routers with prefixes', async () => {
+      await loadModules();
+      const { Router } = await import('../src/lib/router.js');
+      
+      const app = createApplication();
+      const apiRouter = new Router();
+      const usersRouter = new Router();
+      const profilesRouter = new Router();
+      
+      profilesRouter.get('/', (req, res) => {
+        res.json({
+          route: 'profiles',
+          userId: req.params.id,
+          version: req.apiVersion
+        });
+      });
+      
+      usersRouter.use((req, res, next) => {
+        req.resource = 'users';
+        next();
+      });
+      
+      usersRouter.get('/', (req, res) => {
+        res.json({ route: 'users', resource: req.resource, version: req.apiVersion });
+      });
+      
+      usersRouter.get('/:id', (req, res) => {
+        res.json({ route: 'user', id: req.params.id, version: req.apiVersion });
+      });
+      
+      usersRouter.use('/:id/profiles', profilesRouter);
+      
+      apiRouter.use((req, res, next) => {
+        req.apiVersion = 'v1';
+        next();
+      });
+      
+      apiRouter.use('/users', usersRouter);
+      app.use('/v1', apiRouter);
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const listResponse = await makeRequestToPort('GET', '/v1/users', null, port);
+        assert.strictEqual(listResponse.statusCode, 200);
+        assert.strictEqual(listResponse.data.route, 'users');
+        assert.strictEqual(listResponse.data.version, 'v1');
+        
+        const userResponse = await makeRequestToPort('GET', '/v1/users/42', null, port);
+        assert.strictEqual(userResponse.statusCode, 200);
+        assert.strictEqual(userResponse.data.id, '42');
+        
+        const profileResponse = await makeRequestToPort('GET', '/v1/users/42/profiles', null, port);
+        assert.strictEqual(profileResponse.statusCode, 200);
+        assert.strictEqual(profileResponse.data.route, 'profiles');
+        assert.strictEqual(profileResponse.data.userId, '42');
+        assert.strictEqual(profileResponse.data.version, 'v1');
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should support router prefix with route()', async () => {
+      await loadModules();
+      const { Router } = await import('../src/lib/router.js');
+      
+      const app = createApplication();
+      const apiRouter = new Router();
+      const usersRouter = apiRouter.route('/users');
+      
+      usersRouter.get('/', (req, res) => {
+        res.json({ route: 'users-root' });
+      });
+      
+      usersRouter.get('/:id', (req, res) => {
+        res.json({ route: 'users-id', id: req.params.id });
+      });
+      
+      app.use('/api', apiRouter);
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const rootResponse = await makeRequestToPort('GET', '/api/users', null, port);
+        assert.strictEqual(rootResponse.statusCode, 200);
+        assert.strictEqual(rootResponse.data.route, 'users-root');
+        
+        const idResponse = await makeRequestToPort('GET', '/api/users/100', null, port);
+        assert.strictEqual(idResponse.statusCode, 200);
+        assert.strictEqual(idResponse.data.id, '100');
+      } finally {
+        await app.close();
+      }
+    });
+
     it('should parse repeated parameters as arrays in request', async () => {
       await loadModules();
       

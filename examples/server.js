@@ -157,6 +157,11 @@ app.get('/', (req, res) => {
       { method: 'GET', path: '/error-next', description: 'next(err) skip middleware test' },
       { method: 'GET', path: '/error-default', description: 'Default error response test' },
       { method: 'GET', path: '/router-test', description: 'Router with its own middleware' },
+      { method: 'GET', path: '/v1/users', description: 'Nested router: versioned users' },
+      { method: 'GET', path: '/v1/users/:id/profile', description: 'Nested router: user profile' },
+      { method: 'GET', path: '/v1/users/:id/orders', description: 'Nested router: user orders' },
+      { method: 'GET', path: '/v1/products', description: 'Nested router: products' },
+      { method: 'GET', path: '/v1/products/:id', description: 'Nested router: product details' },
       // Response methods tests
       { method: 'GET', path: '/response/status', description: 'res.status() test' },
       { method: 'GET', path: '/response/send-status', description: 'res.sendStatus() test' },
@@ -495,6 +500,105 @@ apiRouter.get('/products/:id',
 
 // Mount router at /router-test
 app.use('/router-test', apiRouter);
+
+// ============================================
+// 6. NESTED ROUTER MODULES
+// Demonstrates routers as mini apps with nesting
+// ============================================
+
+// Create versioned API router
+const v1Router = new Router();
+
+// v1 middleware (applies to all v1 routes)
+v1Router.use((req, res, next) => {
+  logExecution('ROUTER', 'v1 Middleware', req.path);
+  req.apiVersion = 'v1';
+  next();
+});
+
+// Users router
+const usersRouter = new Router();
+
+// Users middleware
+usersRouter.use((req, res, next) => {
+  logExecution('ROUTER', 'Users Router Middleware', req.path);
+  req.resource = 'users';
+  next();
+});
+
+// Users routes
+usersRouter.get('/', (req, res) => {
+  res.json({
+    message: 'Users list',
+    version: req.apiVersion,
+    resource: req.resource,
+    users: [
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' }
+    ]
+  });
+});
+
+usersRouter.get('/:id/profile', (req, res) => {
+  res.json({
+    message: 'User profile',
+    version: req.apiVersion,
+    resource: req.resource,
+    userId: req.params.id,
+    profile: { id: req.params.id, name: 'User ' + req.params.id, role: 'member' }
+  });
+});
+
+usersRouter.get('/:id/orders', (req, res) => {
+  res.json({
+    message: 'User orders',
+    version: req.apiVersion,
+    resource: req.resource,
+    userId: req.params.id,
+    orders: [
+      { id: 101, total: 99.99 },
+      { id: 102, total: 49.50 }
+    ]
+  });
+});
+
+// Products router
+const productsRouter = new Router();
+
+productsRouter.use((req, res, next) => {
+  logExecution('ROUTER', 'Products Router Middleware', req.path);
+  req.resource = 'products';
+  next();
+});
+
+productsRouter.get('/', (req, res) => {
+  res.json({
+    message: 'Products list',
+    version: req.apiVersion,
+    resource: req.resource,
+    products: [
+      { id: 1, name: 'Laptop', price: 999 },
+      { id: 2, name: 'Phone', price: 699 }
+    ]
+  });
+});
+
+productsRouter.get('/:id', (req, res) => {
+  res.json({
+    message: 'Product details',
+    version: req.apiVersion,
+    resource: req.resource,
+    productId: req.params.id,
+    product: { id: req.params.id, name: 'Product ' + req.params.id, price: 100 }
+  });
+});
+
+// Nested routers: mount users and products under v1
+v1Router.use('/users', usersRouter);
+v1Router.use('/products', productsRouter);
+
+// Mount v1 router under /v1
+app.use('/v1', v1Router);
 
 // ============================================
 // 6. RESPONSE METHODS TESTS
@@ -1106,6 +1210,13 @@ app.listen(PORT, (address) => {
   console.log(`curl http://localhost:${address.port}/router-test/products`);
   console.log(`curl http://localhost:${address.port}/router-test/products/1`);
   console.log(`curl http://localhost:${address.port}/router-test/products/abc`);
+  
+  console.log('\n# 6.1 Nested Router Modules');
+  console.log(`curl http://localhost:${address.port}/v1/users`);
+  console.log(`curl http://localhost:${address.port}/v1/users/42/profile`);
+  console.log(`curl http://localhost:${address.port}/v1/users/42/orders`);
+  console.log(`curl http://localhost:${address.port}/v1/products`);
+  console.log(`curl http://localhost:${address.port}/v1/products/10`);
   
   console.log('\n# 7. Response Methods Tests');
   console.log(`curl http://localhost:${address.port}/response/status`);
