@@ -29,6 +29,10 @@ export class Route {
     
     // Route metadata
     this.isWildcard = method === '*';
+    
+    // Calculate priority score for route matching
+    // Higher score = higher priority (matched first)
+    this.priority = this._calculatePriority(path);
   }
   
   /**
@@ -63,6 +67,48 @@ export class Route {
     
     // Ensure exact match
     return new RegExp(`^${pattern}$`);
+  }
+  
+  /**
+   * Calculate priority score for route matching
+   * Priority rules (inspired by Express.js):
+   * - Static routes have highest priority (no parameters)
+   * - Routes with parameters have lower priority
+   * - More parameters = lower priority
+   * - Parameters earlier in path = lower priority than later
+   * 
+   * @param {string} path - Path pattern
+   * @returns {number} Priority score (higher = match first)
+   * @private
+   */
+  _calculatePriority(path) {
+    // Split path into segments
+    const segments = path.split('/').filter(Boolean);
+    
+    let score = 0;
+    const paramCount = this.paramNames.length;
+    
+    // Score calculation:
+    // - Each static segment adds 3 points
+    // - Each parameter segment adds 1 point
+    // - Subtract points for more parameters
+    // - Position-weighted scoring for static segments
+    
+    segments.forEach((segment, index) => {
+      const positionWeight = (segments.length - index); // Earlier segments weighted higher
+      if (segment.startsWith(':')) {
+        // Parameter segment - lower weight
+        score += positionWeight * 1;
+      } else {
+        // Static segment - higher weight
+        score += positionWeight * 3;
+      }
+    });
+    
+    // Penalty for having parameters (static routes should always win)
+    score -= paramCount * 10;
+    
+    return score;
   }
   
   /**
@@ -127,7 +173,8 @@ export class Route {
       path: this.path,
       paramNames: this.paramNames,
       handlerCount: this.handlers.length,
-      hasMiddleware: this.hasMiddleware()
+      hasMiddleware: this.hasMiddleware(),
+      priority: this.priority
     };
   }
 }

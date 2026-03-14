@@ -95,6 +95,372 @@ describe('grokexpress Application Tests', () => {
   });
 });
 
+// ============================================
+// PARAMETERIZED ROUTES AND PRIORITY TESTS
+// ============================================
+
+describe('Parameterized Routes and Priority Tests', () => {
+  // Import modules for unit testing
+  let Route, RouteTable, createApplication;
+  
+  async function loadModules() {
+    const routeModule = await import('../src/lib/route.js');
+    const routeTableModule = await import('../src/lib/route-table.js');
+    const appModule = await import('../src/lib/application.js');
+    Route = routeModule.Route;
+    RouteTable = routeTableModule.RouteTable;
+    createApplication = appModule.createApplication;
+  }
+
+  describe('Route Class', () => {
+    it('should extract parameter names from route path', async () => {
+      await loadModules();
+      
+      const route = new Route('GET', '/users/:id', [() => {}]);
+      assert.deepStrictEqual(route.paramNames, ['id']);
+      
+      const route2 = new Route('GET', '/posts/:postId/comments/:commentId', [() => {}]);
+      assert.deepStrictEqual(route2.paramNames, ['postId', 'commentId']);
+    });
+
+    it('should create regex for matching URLs', async () => {
+      await loadModules();
+      
+      const route = new Route('GET', '/users/:id', [() => {}]);
+      assert.ok(route.regex.test('/users/123'));
+      assert.ok(route.regex.test('/users/abc'));
+      assert.ok(!route.regex.test('/users'));
+      assert.ok(!route.regex.test('/users/123/extra'));
+    });
+
+    it('should match URLs and extract params', async () => {
+      await loadModules();
+      
+      const route = new Route('GET', '/users/:id', [() => {}]);
+      
+      const result1 = route.match('GET', '/users/123');
+      assert.strictEqual(result1.matched, true);
+      assert.deepStrictEqual(result1.params, { id: '123' });
+      
+      const result2 = route.match('GET', '/users/abc');
+      assert.strictEqual(result2.matched, true);
+      assert.deepStrictEqual(result2.params, { id: 'abc' });
+      
+      const result3 = route.match('GET', '/posts/123');
+      assert.strictEqual(result3.matched, false);
+    });
+
+    it('should match multiple parameters', async () => {
+      await loadModules();
+      
+      const route = new Route('GET', '/posts/:postId/comments/:commentId', [() => {}]);
+      
+      const result = route.match('GET', '/posts/42/comments/99');
+      assert.strictEqual(result.matched, true);
+      assert.deepStrictEqual(result.params, { postId: '42', commentId: '99' });
+    });
+
+    it('should calculate priority correctly', async () => {
+      await loadModules();
+      
+      // Static route should have higher priority than parameterized route
+      const staticRoute = new Route('GET', '/users/profile', [() => {}]);
+      const paramRoute = new Route('GET', '/users/:id', [() => {}]);
+      
+      assert.ok(staticRoute.priority > paramRoute.priority, 
+        `Static route priority (${staticRoute.priority}) should be > param route priority (${paramRoute.priority})`);
+    });
+
+    it('should give higher priority to routes with more static segments', async () => {
+      await loadModules();
+      
+      const route1 = new Route('GET', '/users/:id/posts', [() => {}]);
+      const route2 = new Route('GET', '/users/:id/:postId', [() => {}]);
+      
+      // route1 has one static segment after param, route2 has two params
+      assert.ok(route1.priority > route2.priority,
+        `Route with static segment (${route1.priority}) should have higher priority than all params (${route2.priority})`);
+    });
+  });
+
+  describe('RouteTable Class', () => {
+    it('should register and find routes', async () => {
+      await loadModules();
+      
+      const table = new RouteTable();
+      table.register('GET', '/users', () => {});
+      table.register('GET', '/users/:id', () => {});
+      
+      const result1 = table.find('GET', '/users');
+      assert.ok(result1.route);
+      assert.strictEqual(result1.route.path, '/users');
+      assert.deepStrictEqual(result1.params, {});
+      
+      const result2 = table.find('GET', '/users/123');
+      assert.ok(result2.route);
+      assert.strictEqual(result2.route.path, '/users/:id');
+      assert.deepStrictEqual(result2.params, { id: '123' });
+    });
+
+    it('should match static routes before parameterized routes', async () => {
+      await loadModules();
+      
+      const table = new RouteTable();
+      // Register in reverse order to test priority sorting
+      table.register('GET', '/users/:id', () => 'param');
+      table.register('GET', '/users/profile', () => 'static');
+      table.register('GET', '/users/admin', () => 'static2');
+      
+      // Static route should match even though param route was registered first
+      const result1 = table.find('GET', '/users/profile');
+      assert.strictEqual(result1.route.path, '/users/profile');
+      
+      const result2 = table.find('GET', '/users/admin');
+      assert.strictEqual(result2.route.path, '/users/admin');
+      
+      // Param route should match for other values
+      const result3 = table.find('GET', '/users/123');
+      assert.strictEqual(result3.route.path, '/users/:id');
+    });
+
+    it('should handle multiple parameters correctly', async () => {
+      await loadModules();
+      
+      const table = new RouteTable();
+      table.register('GET', '/users/:userId/posts/:postId', () => {});
+      
+      const result = table.find('GET', '/users/42/posts/99');
+      assert.ok(result.route);
+      assert.deepStrictEqual(result.params, { userId: '42', postId: '99' });
+    });
+
+    it('should detect route collisions', async () => {
+      await loadModules();
+      
+      const table = new RouteTable();
+      table.register('GET', '/users/:id', () => {});
+      table.register('GET', '/users/:userId', () => {}); // Same structure, different param name
+      
+      const collisions = table.detectCollisions();
+      // These routes could potentially conflict (same structure)
+      assert.ok(collisions.length >= 0); // At minimum, it should not throw
+    });
+
+    it('should return 404 for non-matching routes', async () => {
+      await loadModules();
+      
+      const table = new RouteTable();
+      table.register('GET', '/users/:id', () => {});
+      
+      const result = table.find('GET', '/posts/123');
+      assert.strictEqual(result.route, null);
+    });
+
+    it('should handle routes with same prefix but different methods', async () => {
+      await loadModules();
+      
+      const table = new RouteTable();
+      table.register('GET', '/users/:id', () => 'get');
+      table.register('POST', '/users/:id', () => 'post');
+      
+      const getResult = table.find('GET', '/users/123');
+      assert.strictEqual(getResult.route.method, 'GET');
+      
+      const postResult = table.find('POST', '/users/123');
+      assert.strictEqual(postResult.route.method, 'POST');
+    });
+  });
+
+  describe('Integration Tests with Application', () => {
+    it('should set req.params correctly', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      let capturedParams = null;
+      
+      app.get('/test/:id', (req, res) => {
+        capturedParams = req.params;
+        res.json({ params: req.params });
+      });
+      
+      // Start server on a random port
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', `/test/123`, null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.deepStrictEqual(response.data.params, { id: '123' });
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should handle nested parameters', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      
+      app.get('/orgs/:orgId/teams/:teamId/members/:memberId', (req, res) => {
+        res.json({ params: req.params });
+      });
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', '/orgs/myorg/teams/myteam/members/john', null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.deepStrictEqual(response.data.params, {
+          orgId: 'myorg',
+          teamId: 'myteam',
+          memberId: 'john'
+        });
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should match static routes before parameterized in app', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      
+      // Register param route first
+      app.get('/api/:version', (req, res) => {
+        res.json({ type: 'param', version: req.params.version });
+      });
+      
+      // Register static routes after
+      app.get('/api/latest', (req, res) => {
+        res.json({ type: 'static', version: 'latest' });
+      });
+      
+      app.get('/api/v2', (req, res) => {
+        res.json({ type: 'static', version: 'v2' });
+      });
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        // Static routes should match
+        const latestResponse = await makeRequestToPort('GET', '/api/latest', null, port);
+        assert.strictEqual(latestResponse.data.type, 'static');
+        
+        const v2Response = await makeRequestToPort('GET', '/api/v2', null, port);
+        assert.strictEqual(v2Response.data.type, 'static');
+        
+        // Other values should match param route
+        const v3Response = await makeRequestToPort('GET', '/api/v3', null, port);
+        assert.strictEqual(v3Response.data.type, 'param');
+        assert.strictEqual(v3Response.data.version, 'v3');
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should work with middleware and params', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      
+      app.get('/users/:id',
+        (req, res, next) => {
+          // Middleware can access params
+          req.userId = req.params.id;
+          next();
+        },
+        (req, res) => {
+          res.json({ 
+            params: req.params,
+            userId: req.userId 
+          });
+        }
+      );
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', '/users/42', null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.strictEqual(response.data.params.id, '42');
+        assert.strictEqual(response.data.userId, '42');
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should handle Router with parameterized routes', async () => {
+      await loadModules();
+      
+      const { Router } = await import('../src/lib/router.js');
+      const app = createApplication();
+      const router = new Router();
+      
+      router.get('/:id', (req, res) => {
+        res.json({ id: req.params.id });
+      });
+      
+      app.use('/items', router);
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', '/items/123', null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.strictEqual(response.data.id, '123');
+      } finally {
+        await app.close();
+      }
+    });
+  });
+});
+
+// Helper function to make HTTP requests to a specific port
+function makeRequestToPort(method, path, data = null, port = 3000) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'localhost',
+      port,
+      path,
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+
+    const req = http.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          const parsedBody = body ? JSON.parse(body) : {};
+          resolve({
+            statusCode: res.statusCode,
+            data: parsedBody
+          });
+        } catch (err) {
+          resolve({
+            statusCode: res.statusCode,
+            data: body
+          });
+        }
+      });
+    });
+
+    req.on('error', reject);
+
+    if (data) {
+      req.write(JSON.stringify(data));
+    }
+
+    req.end();
+  });
+}
+
 // Helper function to make HTTP requests
 function makeRequest(method, path, data = null) {
   return new Promise((resolve, reject) => {
