@@ -664,6 +664,184 @@ function makeRequestToPort(method, path, data = null, port = 3000) {
   });
 }
 
+// ============================================
+// BODY PARSER MIDDLEWARE TESTS
+// ============================================
+
+describe('Body Parser Middleware Tests', () => {
+  let bodyParser, jsonParser, urlencodedParser;
+  
+  async function loadModules() {
+    const bpModule = await import('../src/middleware/bodyParser.js');
+    bodyParser = bpModule.default;
+    jsonParser = bpModule.json;
+    urlencodedParser = bpModule.urlencoded;
+  }
+
+  describe('Body Parser Module', () => {
+    it('should export bodyParser namespace', async () => {
+      await loadModules();
+      assert.strictEqual(typeof bodyParser, 'function');
+      assert.strictEqual(typeof bodyParser.json, 'function');
+      assert.strictEqual(typeof bodyParser.urlencoded, 'function');
+    });
+
+    it('should export individual parsers', async () => {
+      await loadModules();
+      assert.strictEqual(typeof jsonParser, 'function');
+      assert.strictEqual(typeof urlencodedParser, 'function');
+    });
+  });
+
+  describe('JSON Parser', () => {
+    it('should parse valid JSON body', async () => {
+      await loadModules();
+      const parser = jsonParser();
+      
+      const mockReq = {
+        _raw: {
+          on: (event, cb) => {
+            if (event === 'data') cb('{"name":"John","age":30}');
+            if (event === 'end') cb();
+          },
+          destroy: () => {}
+        },
+        get: (name) => name === 'content-type' ? 'application/json' : undefined,
+        method: 'POST',
+        body: null
+      };
+      
+      let nextCalled = false;
+      let parsedBody = null;
+      
+      await parser(mockReq, {}, (err) => {
+        if (!err) nextCalled = true;
+        parsedBody = mockReq.body;
+      });
+      
+      assert.strictEqual(nextCalled, true);
+      assert.deepStrictEqual(parsedBody, { name: 'John', age: 30 });
+    });
+
+    it('should handle empty body', async () => {
+      await loadModules();
+      const parser = jsonParser();
+      
+      const mockReq = {
+        _raw: {
+          on: (event, cb) => {
+            if (event === 'end') cb();
+          },
+          destroy: () => {}
+        },
+        get: (name) => 'application/json',
+        method: 'POST',
+        body: null
+      };
+      
+      await parser(mockReq, {}, () => {});
+      assert.deepStrictEqual(mockReq.body, {});
+    });
+
+    it('should reject invalid JSON', async () => {
+      await loadModules();
+      const parser = jsonParser();
+      
+      const mockReq = {
+        _raw: {
+          on: (event, cb) => {
+            if (event === 'data') cb('{invalid}');
+            if (event === 'end') cb();
+          },
+          destroy: () => {}
+        },
+        get: (name) => 'application/json',
+        method: 'POST',
+        body: null
+      };
+      
+      let errorPassed = null;
+      
+      await parser(mockReq, {}, (err) => {
+        errorPassed = err;
+      });
+      
+      assert.ok(errorPassed);
+      assert.strictEqual(errorPassed.status, 400);
+    });
+  });
+
+  describe('URL-encoded Parser', () => {
+    it('should parse simple form data', async () => {
+      await loadModules();
+      const parser = urlencodedParser();
+      
+      const mockReq = {
+        _raw: {
+          on: (event, cb) => {
+            if (event === 'data') cb('name=John&age=30');
+            if (event === 'end') cb();
+          },
+          destroy: () => {}
+        },
+        get: (name) => 'application/x-www-form-urlencoded',
+        method: 'POST',
+        body: null
+      };
+      
+      await parser(mockReq, {}, () => {});
+      
+      assert.strictEqual(mockReq.body.name, 'John');
+      assert.strictEqual(mockReq.body.age, '30');
+    });
+
+    it('should parse repeated parameters as arrays', async () => {
+      await loadModules();
+      const parser = urlencodedParser();
+      
+      const mockReq = {
+        _raw: {
+          on: (event, cb) => {
+            if (event === 'data') cb('tags=js&tags=node&tags=express');
+            if (event === 'end') cb();
+          },
+          destroy: () => {}
+        },
+        get: (name) => 'application/x-www-form-urlencoded',
+        method: 'POST',
+        body: null
+      };
+      
+      await parser(mockReq, {}, () => {});
+      
+      assert.deepStrictEqual(mockReq.body.tags, ['js', 'node', 'express']);
+    });
+
+    it('should decode URL-encoded values', async () => {
+      await loadModules();
+      const parser = urlencodedParser();
+      
+      const mockReq = {
+        _raw: {
+          on: (event, cb) => {
+            if (event === 'data') cb('name=John%20Doe&email=john%40example.com');
+            if (event === 'end') cb();
+          },
+          destroy: () => {}
+        },
+        get: (name) => 'application/x-www-form-urlencoded',
+        method: 'POST',
+        body: null
+      };
+      
+      await parser(mockReq, {}, () => {});
+      
+      assert.strictEqual(mockReq.body.name, 'John Doe');
+      assert.strictEqual(mockReq.body.email, 'john@example.com');
+    });
+  });
+});
+
 // Helper function to make HTTP requests
 function makeRequest(method, path, data = null) {
   return new Promise((resolve, reject) => {

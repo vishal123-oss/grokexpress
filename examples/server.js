@@ -16,6 +16,7 @@
  */
 
 import createApplication, { Router } from '../src/lib/index.js';
+import bodyParser from '../src/middleware/bodyParser.js';
 
 // ============================================
 // Create the application
@@ -892,6 +893,147 @@ app.get('/query/combined/:category', (req, res) => {
 });
 
 // ============================================
+// 8. BODY PARSING TESTS
+// Demonstrates built-in body parser middleware
+// ============================================
+
+// Apply body parser middleware globally for POST/PUT/PATCH routes
+// This will auto-detect content-type and parse JSON or URL-encoded
+app.use(bodyParser.json({ limit: '1mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '1mb' }));
+
+/**
+ * Test: JSON body parsing
+ * POST /body/json
+ * Body: {"name": "John", "age": 30, "tags": ["admin", "user"]}
+ */
+app.post('/body/json', (req, res) => {
+  res.json({
+    message: 'JSON body parsed successfully',
+    body: req.body,
+    bodyType: typeof req.body,
+    isObject: typeof req.body === 'object',
+    name: req.body?.name,
+    age: req.body?.age,
+    tags: req.body?.tags
+  });
+});
+
+/**
+ * Test: JSON body with nested objects
+ * POST /body/json-nested
+ * Body: {"user": {"name": "Jane", "profile": {"email": "jane@example.com"}}}
+ */
+app.post('/body/json-nested', (req, res) => {
+  res.json({
+    message: 'Nested JSON body parsed',
+    body: req.body,
+    user: req.body?.user,
+    userName: req.body?.user?.name,
+    userEmail: req.body?.user?.profile?.email
+  });
+});
+
+/**
+ * Test: URL-encoded form body parsing
+ * POST /body/form
+ * Content-Type: application/x-www-form-urlencoded
+ * Body: name=John+Doe&email=john%40example.com&age=30
+ */
+app.post('/body/form', (req, res) => {
+  res.json({
+    message: 'URL-encoded form body parsed',
+    body: req.body,
+    bodyType: typeof req.body,
+    name: req.body?.name,
+    email: req.body?.email,
+    age: req.body?.age
+  });
+});
+
+/**
+ * Test: URL-encoded with repeated parameters (arrays)
+ * POST /body/form-array
+ * Body: tags=javascript&tags=nodejs&tags=express
+ */
+app.post('/body/form-array', (req, res) => {
+  res.json({
+    message: 'URL-encoded array fields parsed',
+    body: req.body,
+    tags: req.body?.tags,
+    isArray: Array.isArray(req.body?.tags)
+  });
+});
+
+/**
+ * Test: PUT with JSON body
+ * PUT /body/json/:id
+ */
+app.put('/body/json/:id', (req, res) => {
+  res.json({
+    message: 'PUT JSON body parsed',
+    params: req.params,
+    body: req.body,
+    id: req.params.id,
+    updates: req.body
+  });
+});
+
+/**
+ * Test: PATCH with URL-encoded body
+ * PATCH /body/form/:id
+ */
+app.patch('/body/form/:id', (req, res) => {
+  res.json({
+    message: 'PATCH form body parsed',
+    params: req.params,
+    body: req.body,
+    id: req.params.id
+  });
+});
+
+/**
+ * Test: Empty body handling
+ * POST /body/empty
+ * Body: (empty)
+ */
+app.post('/body/empty', (req, res) => {
+  res.json({
+    message: 'Empty body handled',
+    body: req.body,
+    isEmpty: req.body === null || (typeof req.body === 'object' && Object.keys(req.body || {}).length === 0)
+  });
+});
+
+/**
+ * Test: Invalid JSON handling (should return 400)
+ * POST /body/invalid-json
+ * Body: {invalid json}
+ */
+app.post('/body/invalid-json', (req, res) => {
+  res.json({
+    message: 'Invalid JSON test - if you see this, body was not parsed',
+    body: req.body
+  });
+});
+
+/**
+ * Test: Content-type detection
+ * POST /body/detect
+ * Send with different Content-Type headers
+ */
+app.post('/body/detect', (req, res) => {
+  const contentType = req.get('content-type') || 'none';
+  res.json({
+    message: 'Content-type detection test',
+    contentType,
+    parsedAsJSON: typeof req.body === 'object' && req.get('content-type')?.includes('json'),
+    parsedAsForm: typeof req.body === 'object' && req.get('content-type')?.includes('form'),
+    body: req.body
+  });
+});
+
+// ============================================
 // 4. ERROR HANDLER MIDDLEWARE
 // Must be registered AFTER all other middleware and routes
 // Signature: (err, req, res, next) => {}
@@ -993,6 +1135,20 @@ app.listen(PORT, (address) => {
   console.log(`curl 'http://localhost:${address.port}/query/indexed?items[0]=first&items[1]=second&items[2]=third'`);
   console.log(`curl 'http://localhost:${address.port}/query/encoded?name=John%20Doe&email=john%40example.com'`);
   console.log(`curl 'http://localhost:${address.port}/query/combined/electronics?sort=asc&limit=20'`);
+  
+  console.log('\n# 9. Body Parsing Tests');
+  console.log(`# JSON body parsing`);
+  console.log(`curl -X POST http://localhost:${address.port}/body/json -H "Content-Type: application/json" -d '{"name":"John","age":30,"tags":["admin","user"]}'`);
+  console.log(`curl -X POST http://localhost:${address.port}/body/json-nested -H "Content-Type: application/json" -d '{"user":{"name":"Jane","profile":{"email":"jane@example.com"}}}'`);
+  console.log(`# URL-encoded form body parsing`);
+  console.log(`curl -X POST http://localhost:${address.port}/body/form -H "Content-Type: application/x-www-form-urlencoded" -d "name=John+Doe&email=john%40example.com&age=30"`);
+  console.log(`curl -X POST http://localhost:${address.port}/body/form-array -H "Content-Type: application/x-www-form-urlencoded" -d "tags=javascript&tags=nodejs&tags=express"`);
+  console.log(`# PUT/PATCH with body`);
+  console.log(`curl -X PUT http://localhost:${address.port}/body/json/123 -H "Content-Type: application/json" -d '{"name":"Updated"}'`);
+  console.log(`curl -X PATCH http://localhost:${address.port}/body/form/123 -H "Content-Type: application/x-www-form-urlencoded" -d "status=active"`);
+  console.log(`# Empty body and error handling`);
+  console.log(`curl -X POST http://localhost:${address.port}/body/empty`);
+  console.log(`curl -X POST http://localhost:${address.port}/body/invalid-json -H "Content-Type: application/json" -d '{invalid}'`);
   
   console.log('');
 });
