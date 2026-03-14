@@ -419,6 +419,209 @@ describe('Parameterized Routes and Priority Tests', () => {
   });
 });
 
+// ============================================
+// QUERY STRING PARSING TESTS
+// ============================================
+
+describe('Query String Parsing Tests', () => {
+  let createApplication, parseQueryString;
+  
+  async function loadModules() {
+    const appModule = await import('../src/lib/application.js');
+    const utilsModule = await import('../src/utils/index.js');
+    createApplication = appModule.createApplication;
+    parseQueryString = utilsModule.parseQueryString;
+  }
+
+  describe('parseQueryString function', () => {
+    it('should parse simple query parameters', async () => {
+      await loadModules();
+      
+      const result = parseQueryString('?name=John&age=30');
+      assert.deepStrictEqual(result, { name: 'John', age: '30' });
+    });
+
+    it('should handle repeated parameters as arrays', async () => {
+      await loadModules();
+      
+      const result = parseQueryString('?id=1&id=2&id=3');
+      assert.deepStrictEqual(result, { id: ['1', '2', '3'] });
+    });
+
+    it('should parse array notation', async () => {
+      await loadModules();
+      
+      const result = parseQueryString('?tags[]=javascript&tags[]=nodejs&tags[]=express');
+      assert.deepStrictEqual(result, { tags: ['javascript', 'nodejs', 'express'] });
+    });
+
+    it('should parse nested object notation', async () => {
+      await loadModules();
+      
+      const result = parseQueryString('?user[name]=John&user[email]=john@example.com');
+      assert.deepStrictEqual(result, { 
+        user: { 
+          name: 'John', 
+          email: 'john@example.com' 
+        } 
+      });
+    });
+
+    it('should parse deep nested objects', async () => {
+      await loadModules();
+      
+      const result = parseQueryString('?filter[status]=active&filter[settings][theme]=dark');
+      assert.deepStrictEqual(result, { 
+        filter: { 
+          status: 'active',
+          settings: { theme: 'dark' }
+        } 
+      });
+    });
+
+    it('should parse indexed array notation', async () => {
+      await loadModules();
+      
+      const result = parseQueryString('?items[0]=first&items[1]=second&items[2]=third');
+      assert.deepStrictEqual(result, { items: ['first', 'second', 'third'] });
+    });
+
+    it('should decode URL encoded values', async () => {
+      await loadModules();
+      
+      const result = parseQueryString('?name=John%20Doe&email=john%40example.com');
+      assert.strictEqual(result.name, 'John Doe');
+      assert.strictEqual(result.email, 'john@example.com');
+    });
+
+    it('should handle empty query string', async () => {
+      await loadModules();
+      
+      assert.deepStrictEqual(parseQueryString(''), {});
+      assert.deepStrictEqual(parseQueryString('?'), {});
+      assert.deepStrictEqual(parseQueryString(null), {});
+    });
+
+    it('should handle mixed parameters', async () => {
+      await loadModules();
+      
+      const result = parseQueryString('?sort=desc&tags[]=js&tags[]=node&id=1&id=2');
+      assert.strictEqual(result.sort, 'desc');
+      assert.deepStrictEqual(result.tags, ['js', 'node']);
+      assert.deepStrictEqual(result.id, ['1', '2']);
+    });
+  });
+
+  describe('Integration Tests with Application', () => {
+    it('should parse simple query in request', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      
+      app.get('/test', (req, res) => {
+        res.json({ query: req.query });
+      });
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', '/test?name=John&age=30', null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.deepStrictEqual(response.data.query, { name: 'John', age: '30' });
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should parse repeated parameters as arrays in request', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      
+      app.get('/test', (req, res) => {
+        res.json({ query: req.query, isArray: Array.isArray(req.query.id) });
+      });
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', '/test?id=1&id=2&id=3', null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.deepStrictEqual(response.data.query.id, ['1', '2', '3']);
+        assert.strictEqual(response.data.isArray, true);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should parse array notation in request', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      
+      app.get('/test', (req, res) => {
+        res.json({ tags: req.query.tags });
+      });
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', '/test?tags[]=js&tags[]=node&tags[]=express', null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.deepStrictEqual(response.data.tags, ['js', 'node', 'express']);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should parse nested objects in request', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      
+      app.get('/test', (req, res) => {
+        res.json({ user: req.query.user });
+      });
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', '/test?user[name]=John&user[email]=john@example.com', null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.deepStrictEqual(response.data.user, { name: 'John', email: 'john@example.com' });
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('should combine route params and query strings', async () => {
+      await loadModules();
+      
+      const app = createApplication();
+      
+      app.get('/test/:category', (req, res) => {
+        res.json({ params: req.params, query: req.query });
+      });
+      
+      const server = await app.listen(0);
+      const port = server.address().port;
+      
+      try {
+        const response = await makeRequestToPort('GET', '/test/electronics?sort=asc&limit=10', null, port);
+        assert.strictEqual(response.statusCode, 200);
+        assert.deepStrictEqual(response.data.params, { category: 'electronics' });
+        assert.deepStrictEqual(response.data.query, { sort: 'asc', limit: '10' });
+      } finally {
+        await app.close();
+      }
+    });
+  });
+});
+
 // Helper function to make HTTP requests to a specific port
 function makeRequestToPort(method, path, data = null, port = 3000) {
   return new Promise((resolve, reject) => {

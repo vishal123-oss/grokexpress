@@ -1,5 +1,6 @@
 import { parse } from 'node:url';
 import { env } from 'node:process';
+import { parseQueryString } from '../utils/index.js';
 
 /**
  * Request class - wraps native Node.js IncomingMessage
@@ -16,7 +17,9 @@ export class Request {
     // Parsed URL components
     const parsed = parse(req.url, true);
     this.path = parsed.pathname;
-    this.query = parsed.query;
+    
+    // Enhanced query string parsing with array/repeated parameter support
+    this.query = parseQueryString(parsed.search || '');
     this.search = parsed.search;
     
     // Placeholder for route params (set by router)

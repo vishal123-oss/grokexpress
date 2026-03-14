@@ -751,6 +751,147 @@ app.get('/response/jsonp', (req, res) => {
 });
 
 // ============================================
+// 7. QUERY STRING PARSING TESTS
+// Demonstrates enhanced query string parsing
+// ============================================
+
+/**
+ * Test: Simple query parameters
+ * GET /query/simple?name=John&age=30
+ */
+app.get('/query/simple', (req, res) => {
+  res.json({
+    message: 'Simple query parameters',
+    query: req.query,
+    name: req.query.name,
+    age: req.query.age
+  });
+});
+
+/**
+ * Test: Repeated parameters (converted to array)
+ * GET /query/repeated?id=1&id=2&id=3
+ */
+app.get('/query/repeated', (req, res) => {
+  res.json({
+    message: 'Repeated parameters become arrays',
+    query: req.query,
+    id: req.query.id,
+    isArray: Array.isArray(req.query.id)
+  });
+});
+
+/**
+ * Test: Array notation
+ * GET /query/array?tags[]=javascript&tags[]=nodejs&tags[]=express
+ */
+app.get('/query/array', (req, res) => {
+  res.json({
+    message: 'Array notation [] parsing',
+    query: req.query,
+    tags: req.query.tags,
+    isArray: Array.isArray(req.query.tags)
+  });
+});
+
+/**
+ * Test: Nested object notation
+ * GET /query/nested?user[name]=John&user[email]=john@example.com&user[age]=25
+ */
+app.get('/query/nested', (req, res) => {
+  res.json({
+    message: 'Nested object notation parsing',
+    query: req.query,
+    user: req.query.user
+  });
+});
+
+/**
+ * Test: Deep nested objects
+ * GET /query/deep?filter[status]=active&filter[role]=admin&filter[settings][theme]=dark
+ */
+app.get('/query/deep', (req, res) => {
+  res.json({
+    message: 'Deep nested object parsing',
+    query: req.query,
+    filter: req.query.filter
+  });
+});
+
+/**
+ * Test: Mixed query parameters
+ * GET /query/mixed?sort=desc&limit=10&tags[]=js&tags[]=node&filter[status]=active&id=1&id=2
+ */
+app.get('/query/mixed', (req, res) => {
+  res.json({
+    message: 'Mixed query parameter types',
+    query: req.query,
+    types: {
+      sort: typeof req.query.sort,
+      limit: typeof req.query.limit,
+      tags: Array.isArray(req.query.tags) ? 'array' : typeof req.query.tags,
+      filter: typeof req.query.filter,
+      id: Array.isArray(req.query.id) ? 'array' : typeof req.query.id
+    }
+  });
+});
+
+/**
+ * Test: Indexed array notation
+ * GET /query/indexed?items[0]=first&items[1]=second&items[2]=third
+ */
+app.get('/query/indexed', (req, res) => {
+  res.json({
+    message: 'Indexed array notation',
+    query: req.query,
+    items: req.query.items
+  });
+});
+
+/**
+ * Test: URL encoded values
+ * GET /query/encoded?name=John%20Doe&email=john%40example.com&url=https%3A%2F%2Fexample.com
+ */
+app.get('/query/encoded', (req, res) => {
+  res.json({
+    message: 'URL encoded values are decoded',
+    query: req.query,
+    name: req.query.name,
+    email: req.query.email,
+    url: req.query.url
+  });
+});
+
+/**
+ * Test: Empty and missing values
+ * GET /query/empty?name=&age=&present=value
+ */
+app.get('/query/empty', (req, res) => {
+  res.json({
+    message: 'Empty values handling',
+    query: req.query,
+    name: req.query.name,
+    age: req.query.age,
+    present: req.query.present
+  });
+});
+
+/**
+ * Test: Combined route params and query strings
+ * GET /query/combined/:category?sort=asc&limit=20
+ */
+app.get('/query/combined/:category', (req, res) => {
+  res.json({
+    message: 'Combined route params and query strings',
+    params: req.params,
+    query: req.query,
+    category: req.params.category,
+    sort: req.query.sort,
+    limit: req.query.limit
+  });
+});
+
+// ============================================
 // 4. ERROR HANDLER MIDDLEWARE
 // Must be registered AFTER all other middleware and routes
 // Signature: (err, req, res, next) => {}
@@ -841,6 +982,17 @@ app.listen(PORT, (address) => {
   console.log(`curl http://localhost:${address.port}/response/jsonp`);
   console.log(`curl http://localhost:${address.port}/response/not-found`);
   console.log(`curl http://localhost:${address.port}/response/server-error`);
+  
+  console.log('\n# 8. Query String Parsing Tests');
+  console.log(`curl 'http://localhost:${address.port}/query/simple?name=John&age=30'`);
+  console.log(`curl 'http://localhost:${address.port}/query/repeated?id=1&id=2&id=3'`);
+  console.log(`curl 'http://localhost:${address.port}/query/array?tags[]=javascript&tags[]=nodejs&tags[]=express'`);
+  console.log(`curl 'http://localhost:${address.port}/query/nested?user[name]=John&user[email]=john@example.com'`);
+  console.log(`curl 'http://localhost:${address.port}/query/deep?filter[status]=active&filter[role]=admin&filter[settings][theme]=dark'`);
+  console.log(`curl 'http://localhost:${address.port}/query/mixed?sort=desc&limit=10&tags[]=js&tags[]=node&filter[status]=active&id=1&id=2'`);
+  console.log(`curl 'http://localhost:${address.port}/query/indexed?items[0]=first&items[1]=second&items[2]=third'`);
+  console.log(`curl 'http://localhost:${address.port}/query/encoded?name=John%20Doe&email=john%40example.com'`);
+  console.log(`curl 'http://localhost:${address.port}/query/combined/electronics?sort=asc&limit=20'`);
   
   console.log('');
 });
